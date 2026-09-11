@@ -31,8 +31,19 @@ with a `cru_demo_` key.
 ## 2. The MCP server
 
 Call the `cruise` MCP server's `get_budget` tool. If it answers with a project name, this half
-works. If the server is missing or reports a missing variable, the key was not in Claude Code's
-environment when it started — restart from a shell where `CRUISE_API_KEY` is set.
+works.
+
+If the server failed to connect, read its error against step 1 before blaming the key:
+- **`CRUISE_API_KEY` was missing in step 1:** Claude Code sends the header with an empty key, so
+  Cruise answers **401 "Incorrect API key provided"**. It looks like a bad key, but it is the missing
+  one. Claude Code read its environment when it started, so exporting the key now changes nothing.
+  Tell the user to set it in their shell, quit Claude Code, reopen it from that shell and run
+  `/cruise:setup` again.
+- **The key was set, and the answer is 401 "Incorrect API key provided":** the key is wrong for
+  this Cruise, or revoked. The MCP server gives the same answer for both. Common causes are a
+  mistyped key, a `cru_demo_` key against production, or a production key against the demo. Check
+  `CRUISE_BASE_URL` against the key's prefix, then ask for a new key if they match.
+- **The server is not listed at all:** the plugin is not installed or enabled. Run `/plugin`.
 
 ## 3. Route Claude Code's models through Cruise (optional — ask first)
 

@@ -1,0 +1,17 @@
+{
+  "name": "bytesbrains",
+  "owner": {
+    "name": "BytesBrains",
+    "url": "https://bytesbrains.com"
+  },
+  "metadata": {
+    "description": "Claude Code plugins for BytesBrains Cruise — one gateway in front of every model provider, with per-project keys, budgets and a cost ledger."
+  },
+  "plugins": [
+    {
+      "name": "cruise",
+      "source": "./plugins/cruise",
+      "description": "BytesBrains Cruise in Claude Code: your key's models, budget and spend over MCP, a skill for lanes and refusals, a spend status line, and a guided setup to route Claude Code's models through Cruise."
+    }
+  ]
+}

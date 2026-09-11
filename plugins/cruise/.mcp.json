@@ -1,0 +1,11 @@
+{
+  "mcpServers": {
+    "cruise": {
+      "type": "http",
+      "url": "${CRUISE_BASE_URL:-https://cruise.bytesbrains.net}/mcp",
+      "headers": {
+        "Authorization": "Bearer ${CRUISE_API_KEY}"
+      }
+    }
+  }
+}

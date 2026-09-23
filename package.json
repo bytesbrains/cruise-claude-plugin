@@ -1,0 +1,26 @@
+{
+  "name": "cruise-claude-plugin",
+  "version": "0.1.2",
+  "description": "The BytesBrains Cruise plugin for Claude Code, and the marketplace that serves it. The plugin's version lives in plugins/cruise/.claude-plugin/plugin.json; this one follows it.",
+  "license": "Apache-2.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/bytesbrains/cruise-claude-plugin.git"
+  },
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "prepare": "git config core.hooksPath .githooks || true",
+    "typecheck": "tsc",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "validate": "claude plugin validate . && claude plugin validate plugins/cruise",
+    "secrets:scan": "gitleaks detect --source . --redact --no-banner --config .gitleaks.toml"
+  },
+  "devDependencies": {
+    "@types/node": "^22.20.4",
+    "typescript": "^5.9.2",
+    "vitest": "4.1.11"
+  }
+}

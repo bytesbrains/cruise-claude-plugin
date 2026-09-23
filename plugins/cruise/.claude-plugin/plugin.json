@@ -9,6 +9,6 @@
   },
   "homepage": "https://cruise.bytesbrains.net/docs",
   "repository": "https://github.com/bytesbrains/cruise-claude-plugin",
-  "license": "SEE LICENSE IN LICENSE.txt",
+  "license": "Apache-2.0",
   "keywords": ["cruise", "llm-gateway", "budgets", "mcp", "bytesbrains"]
 }

@@ -6,3 +6,7 @@ Licensed under the Apache License, Version 2.0. See LICENSE.
 This license covers the code in this repository. It grants no right to the BytesBrains Cruise
 service, whose use is governed by the terms of service of BytesBrains Pte. Ltd., and, as section 6
 of the license states, no right to use the BytesBrains or Cruise names or marks.
+
+The Cruise logo and mark in assets/ are trademarks of BytesBrains Pte. Ltd. and are not licensed
+under the Apache License. They may be used to refer to this plugin or to BytesBrains Cruise, and
+not to present a fork or another product as ours.

@@ -57,6 +57,14 @@ check is named `check`. `test/plugin.test.ts` holds the plugin's contract. It ch
 For a key that costs nothing, use `export CRUISE_BASE_URL=https://cruise-demo.bytesbrains.net`
 with a `cru_demo_` key.
 
+## The icons
+
+`assets/cruise-logo.svg` (the colour lockup the README shows) and `assets/cruise-mark.svg` (the
+single-colour mark, drawn in `currentColor`) are copies of `assets/` in the BytesBrains site,
+which is where they are drawn. Change them there first, then copy them here unmodified. They
+are BytesBrains marks, not Apache-2.0 code (see `NOTICE`). Claude Code's plugin and marketplace
+manifests have no icon field, so the README is the only place this repo shows them.
+
 ## Releasing (maintainers)
 
 A release is a **tag** that a person cuts. The marketplace serves this repository, and

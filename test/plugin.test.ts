@@ -6,7 +6,7 @@
 // says when it applies, and the status line prints what it should from the
 // answer Cruise actually gives.
 import { execFileSync, spawn, spawnSync } from "node:child_process";
-import { mkdtempSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -39,6 +39,16 @@ describe("the manifest and the marketplace", () => {
     expect(marketplace.plugins[0]).not.toHaveProperty("version");
     // package.json carries one too, for npm; it follows the manifest.
     expect(json("package.json").version).toBe(manifest.version);
+  });
+});
+
+describe("the README", () => {
+  // A moved or renamed icon shows as a broken image on the repo's front page.
+  it("points only at images this repo has", () => {
+    const readme = readFileSync(path.join(ROOT, "README.md"), "utf8");
+    const local = [...readme.matchAll(/<img src="([^"]+)"/g)].map((match) => match[1]!).filter((src) => !/^https?:/.test(src));
+    expect(local).toContain("assets/cruise-logo.svg");
+    for (const src of local) expect(existsSync(path.join(ROOT, src)), src).toBe(true);
   });
 });
 

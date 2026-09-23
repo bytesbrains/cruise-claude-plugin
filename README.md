@@ -1,4 +1,15 @@
-# BytesBrains Cruise for Claude Code
+<p align="center">
+  <img src="assets/cruise-logo.svg" alt="Cruise" width="280" />
+</p>
+
+<h1 align="center">BytesBrains Cruise for Claude Code</h1>
+
+<p align="center">
+  <a href="https://github.com/bytesbrains/cruise-claude-plugin/actions/workflows/ci.yml"><img src="https://github.com/bytesbrains/cruise-claude-plugin/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI" /></a>
+  <a href="plugins/cruise/.claude-plugin/plugin.json"><img src="https://img.shields.io/github/package-json/v/bytesbrains/cruise-claude-plugin?label=plugin&amp;color=3b82f6" alt="Plugin version" /></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-22d3ee" alt="License: Apache-2.0" /></a>
+  <a href="https://bytesbrains.com/cruise"><img src="https://img.shields.io/badge/product-bytesbrains.com%2Fcruise-a855f7" alt="Product" /></a>
+</p>
 
 [BytesBrains Cruise](https://cruise.bytesbrains.net/docs) is one endpoint in front of every model
 provider, with per-project keys, budgets that stop a runaway loop, and a ledger of every request.

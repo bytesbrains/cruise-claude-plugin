@@ -1,0 +1,22 @@
+{
+  "name": "@bytesbrains/claude-code-cruise",
+  "version": "0.1.3",
+  "description": "BytesBrains Cruise for Claude Code: your key's models, budget and spend over MCP, a skill for lanes and refusals, a spend status line, and guided setup. The package root is the plugin root, for a marketplace's npm source.",
+  "license": "Apache-2.0",
+  "author": "BytesBrains Pte. Ltd. (https://bytesbrains.com)",
+  "homepage": "https://github.com/bytesbrains/cruise-claude-plugin#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/bytesbrains/cruise-claude-plugin.git",
+    "directory": "plugins/cruise"
+  },
+  "bugs": {
+    "url": "https://github.com/bytesbrains/cruise-claude-plugin/issues"
+  },
+  "keywords": ["claude-code", "claude-code-plugin", "cruise", "llm-gateway", "budgets", "mcp", "bytesbrains"],
+  "files": [".claude-plugin/", ".mcp.json", "skills/", "scripts/", "NOTICE"],
+  "publishConfig": {
+    "access": "public",
+    "provenance": true
+  }
+}

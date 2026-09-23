@@ -35,6 +35,7 @@ missing. That is on purpose.
 npm run typecheck
 npm test
 npm run validate       # needs the `claude` CLI on PATH
+npm run pack:check     # the npm tarball; needs gitleaks and the `claude` CLI
 npm run secrets:scan
 ```
 
@@ -72,12 +73,15 @@ preview → Edit → Upload an image**.
 
 ## Releasing (maintainers)
 
-A release is a **tag** that a person cuts. The marketplace serves this repository, and
-Claude Code decides whether an update exists from the plugin's `version`, so:
+A release is a **tag** that a person cuts. The tag does two things. The marketplace serves this
+repository, and Claude Code decides whether an update exists from the plugin's `version`. The
+tag also runs `.github/workflows/release.yml`, which publishes `plugins/cruise` to npm as
+`@bytesbrains/claude-code-cruise`.
 
 1. In the pull request that makes the change, bump `version` in
-   `plugins/cruise/.claude-plugin/plugin.json`, and match it in `package.json`. The test
-   checks that the two agree. Keep `version` out of `marketplace.json`.
+   `plugins/cruise/.claude-plugin/plugin.json`, and match it in `plugins/cruise/package.json`
+   and the root `package.json`. The tests check that all three agree. Keep `version` out of
+   `marketplace.json`.
 2. Merge it once `check` is green.
 3. Tag that commit on `main` and push the tag:
 
@@ -87,5 +91,30 @@ git tag v0.x.y origin/main
 git push origin v0.x.y
 ```
 
-The tag must match the manifest (`v0.1.2` ↔ `"0.1.2"`). A bad release is fixed by the next
-version, not by moving a tag.
+The workflow refuses a tag that doesn't match all three versions (`v0.1.3` ↔ `"0.1.3"`), or
+that isn't on `main`. It runs the checks, packs the tarball, and runs `pack:check` on that exact
+tarball:
+
+- the tarball holds only the plugin's files;
+- the status line is still executable;
+- nothing in it is shaped like a key, and gitleaks agrees;
+- `claude plugin validate` accepts it as a plugin.
+
+Then it publishes that tarball with provenance. A bad release is fixed by the next version,
+never by moving a tag or unpublishing.
+
+To retry a publish that failed, without retagging: **Actions → release → Run workflow**, choose
+the existing tag, and set `dry_run` to false. On a branch, the same run only packs and checks.
+
+### npm setup (once)
+
+- **The package is the plugin directory.** A marketplace's npm source unpacks the package as the
+  plugin root, so the package is `plugins/cruise`. The repo root is `private` and never
+  publishes.
+- **Publishing uses npm trusted publishing (OIDC), not a stored token.** On npmjs.com, open
+  `@bytesbrains/claude-code-cruise` → **Settings → Trusted publishing**. Add GitHub Actions with
+  owner `bytesbrains`, repository `cruise-claude-plugin` and workflow `release.yml`.
+- **The first publish needs a token.** npm can only configure trusted publishing on a package
+  that already exists. Add a granular npm token for the `@bytesbrains` scope as the repository
+  secret `NPM_TOKEN`, cut the tag, then set up trusted publishing. After that, delete the
+  secret: with it gone, the workflow uses OIDC.

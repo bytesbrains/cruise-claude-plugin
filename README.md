@@ -35,6 +35,17 @@ you agree — routes Claude Code's own model requests through Cruise and adds th
 To try it without spending anything, use the demo: `export CRUISE_BASE_URL=https://cruise-demo.bytesbrains.net`
 with a `cru_demo_` key.
 
+### From npm
+
+The plugin is also published to npm as
+[`@bytesbrains/claude-code-cruise`](https://www.npmjs.com/package/@bytesbrains/claude-code-cruise),
+with provenance. It is for your own marketplace, for example an internal one that pins versions
+or mirrors a registry. Point an entry at it:
+
+```json
+{ "name": "cruise", "source": { "source": "npm", "package": "@bytesbrains/claude-code-cruise" } }
+```
+
 ## What is inside
 
 | | |

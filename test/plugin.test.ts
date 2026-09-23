@@ -37,8 +37,26 @@ describe("the manifest and the marketplace", () => {
     // One version, in plugin.json: set in both, Claude Code silently takes the
     // manifest's, and the two drift.
     expect(marketplace.plugins[0]).not.toHaveProperty("version");
-    // package.json carries one too, for npm; it follows the manifest.
+    // Both package.json files carry one too, for npm; they follow the manifest.
     expect(json("package.json").version).toBe(manifest.version);
+    expect(json("plugins/cruise/package.json").version).toBe(manifest.version);
+  });
+});
+
+describe("the npm package", () => {
+  // A marketplace's npm source unpacks the package as the plugin root, so the
+  // package is plugins/cruise. The repo root is tooling and must never publish.
+  it("is plugins/cruise, public under @bytesbrains, and the root is not a package", () => {
+    const pkg = json("plugins/cruise/package.json");
+    expect(pkg).toMatchObject({
+      name: "@bytesbrains/claude-code-cruise",
+      license: "Apache-2.0",
+      repository: { url: "git+https://github.com/bytesbrains/cruise-claude-plugin.git", directory: "plugins/cruise" },
+      publishConfig: { access: "public", provenance: true },
+    });
+    expect(pkg).not.toHaveProperty("private");
+    expect(pkg).not.toHaveProperty("scripts");
+    expect(json("package.json").private).toBe(true);
   });
 });
 

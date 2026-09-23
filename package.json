@@ -1,7 +1,8 @@
 {
   "name": "cruise-claude-plugin",
-  "version": "0.1.2",
-  "description": "The BytesBrains Cruise plugin for Claude Code, and the marketplace that serves it. The plugin's version lives in plugins/cruise/.claude-plugin/plugin.json; this one follows it.",
+  "private": true,
+  "version": "0.1.3",
+  "description": "Development of the BytesBrains Cruise plugin for Claude Code and the marketplace that serves it. Never published: the npm package is plugins/cruise (@bytesbrains/claude-code-cruise), and every version here follows plugins/cruise/.claude-plugin/plugin.json.",
   "license": "Apache-2.0",
   "repository": {
     "type": "git",
@@ -16,7 +17,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "validate": "claude plugin validate . && claude plugin validate plugins/cruise",
-    "secrets:scan": "gitleaks detect --source . --redact --no-banner --config .gitleaks.toml"
+    "secrets:scan": "gitleaks detect --source . --redact --no-banner --config .gitleaks.toml",
+    "pack:check": "node scripts/pack-check.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.20.4",

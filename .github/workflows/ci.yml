@@ -1,8 +1,8 @@
-# Types, tests and Claude Code's own validation of the marketplace and plugin,
-# on every PR and on main.
+# Types, tests, Claude Code's own validation of the marketplace and plugin, and
+# the npm tarball's check, on every PR and on main.
 #
-# There is no publish step: the marketplace serves this repository, and a
-# release is a person cutting a `v*` tag on main (CONTRIBUTING.md → Releasing).
+# Publishing is not here: that is release.yml, on a `v*` tag a person cuts on
+# main (CONTRIBUTING.md → Releasing).
 name: ci
 
 on:
@@ -44,10 +44,22 @@ jobs:
       - name: Tests
         run: npm test
 
-      - name: Validate marketplace and plugin
+      - name: Install gitleaks and the Claude Code CLI
         run: |
+          set -euo pipefail
+          curl -sSL -o /tmp/gitleaks.tar.gz \
+            https://github.com/gitleaks/gitleaks/releases/download/v8.24.3/gitleaks_8.24.3_linux_x64.tar.gz
+          echo "9991e0b2903da4c8f6122b5c3186448b927a5da4deef1fe45271c3793f4ee29c  /tmp/gitleaks.tar.gz" | sha256sum -c -
+          sudo tar -xzf /tmp/gitleaks.tar.gz -C /usr/local/bin gitleaks
           npm install --global @anthropic-ai/claude-code
-          npm run validate
+
+      - name: Validate marketplace and plugin
+        run: npm run validate
+
+      # The npm tarball the release would publish, packed and checked the same
+      # way, so a change that breaks it fails here rather than at a tag.
+      - name: Pack check
+        run: npm run pack:check
 
       # Third-party, so pinned to a commit: a tag can be moved. The token is
       # what it lists a pull request's commits with (read-only here).

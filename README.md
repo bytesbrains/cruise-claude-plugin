@@ -57,6 +57,36 @@ for example an internal one that pins versions or mirrors a registry. Point an e
 | **Skill `/cruise:setup`** | The guided setup above. Runs only when you invoke it, and asks before changing any file |
 | **Status line** | Your project's spend this budget period and its state, cached for a minute. Installed by `/cruise:setup` |
 
+## Try it
+
+Once `/cruise:setup` reports the MCP server answering, ask Claude:
+
+- *"Which Cruise models and lanes can this key reach, and what do they cost?"* → `list_models`
+- *"How much of this project's Cruise budget is left, and will my next request be served?"* →
+  `get_budget`
+- *"What did this project spend on Cruise last month, broken down by lane?"* → `get_spend`
+- *"Cruise refused with `budget_exhausted`. What does that mean and what should I do?"* → the
+  `cruise` skill, which explains every refusal code
+
+The tools read only your key's own project and never change anything.
+
+## Troubleshooting
+
+| You see | Means | Do |
+|---|---|---|
+| `/cruise:setup` or the MCP server: **401 "Incorrect API key provided"**, with `CRUISE_API_KEY` unset when Claude Code started | Claude Code sent an empty key. It reads its environment once, at start | Export the key in your shell, quit Claude Code, reopen it from that shell |
+| The same 401 with the key set | The key is wrong for this Cruise host, or revoked | Check `CRUISE_BASE_URL` against the key's prefix: a `cru_demo_` key only works with the demo host. Then ask for a new key |
+| No `cruise` server in `/mcp` | The plugin is not installed or not enabled | Run `/plugin` |
+| Status line: `Cruise: set CRUISE_API_KEY` | The key is not in the status line's environment | Export it where Claude Code starts |
+| Status line: `Cruise: CRUISE_API_KEY is not a Cruise key` | The value has characters a Cruise key cannot have, so it was never sent | Check for quotes or a trailing newline in the value |
+| Status line: `Cruise: no answer from <url>` | Cruise did not answer within three seconds, or answered with something else | Check the URL. The line retries after its one-minute cache |
+| A request refused with `budget_exhausted` | The project's cap for this period is spent | Wait for the period to reset, or raise the cap |
+| A request refused with `wallet_exhausted` | The account is out of credit. Waiting does not help | Top up the wallet |
+
+To stop routing Claude Code through Cruise, remove the keys `/cruise:setup` added to
+`~/.claude/settings.json`: the `ANTHROPIC_*` and `CLAUDE_CODE_ATTRIBUTION_HEADER` entries under
+`env`, plus `apiKeyHelper` and `statusLine`.
+
 ## Worth knowing
 
 - **Routing Claude Code through Cruise replaces your claude.ai subscription** for as long as it
@@ -77,6 +107,7 @@ for example an internal one that pins versions or mirrors a registry. Point an e
 | Marketplace | `/plugin marketplace add bytesbrains/cruise-claude-plugin` |
 | npm | [`@bytesbrains/claude-code-cruise`](https://www.npmjs.com/package/@bytesbrains/claude-code-cruise) |
 | Releases | [tags](https://github.com/bytesbrains/cruise-claude-plugin/tags). The plugin's version is in [`plugin.json`](plugins/cruise/.claude-plugin/plugin.json) |
+| Privacy and terms | [bytesbrains.com/privacy](https://bytesbrains.com/privacy) (with Cruise's own sections) · [bytesbrains.com/terms](https://bytesbrains.com/terms) |
 | Issues and security | [issues](https://github.com/bytesbrains/cruise-claude-plugin/issues). Report vulnerabilities as [`SECURITY.md`](SECURITY.md) describes, not in an issue |
 
 ## Development

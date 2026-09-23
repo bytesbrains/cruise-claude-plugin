@@ -65,6 +65,11 @@ which is where they are drawn. Change them there first, then copy them here unmo
 are BytesBrains marks, not Apache-2.0 code (see `NOTICE`). Claude Code's plugin and marketplace
 manifests have no icon field, so the README is the only place this repo shows them.
 
+`assets/social-preview.png` (1280×640) is the card GitHub shows when this repo is linked. It is
+the colour logo on the site's paper background (`#fbfcfd`), set in Inter and JetBrains Mono. No
+API can set it, so after changing the file, upload it by hand: **Settings → General → Social
+preview → Edit → Upload an image**.
+
 ## Releasing (maintainers)
 
 A release is a **tag** that a person cuts. The marketplace serves this repository, and

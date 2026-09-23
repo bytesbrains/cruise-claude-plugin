@@ -65,17 +65,21 @@ overwrite other keys — and show the diff before writing:
   "env": {
     "ANTHROPIC_BASE_URL": "https://cruise.bytesbrains.net",
     "ANTHROPIC_MODEL": "bb/agentic-coding",
-    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "bb/chat-assistant"
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL": "bb/chat-assistant",
+    "CLAUDE_CODE_ATTRIBUTION_HEADER": "0"
   },
   "apiKeyHelper": "printf %s \"$CRUISE_API_KEY\""
 }
 ```
 
 Use the user's `CRUISE_BASE_URL` instead if it is set, and the model they choose for
-`ANTHROPIC_MODEL`. The helper reads the key from the environment at run time, so the key itself
-never enters the settings file; Claude Code sends the helper's output in both headers Cruise
-accepts. Then tell them to restart Claude Code and run `/status`: the base URL should be
-Cruise's and the credential source `apiKeyHelper`. To undo, remove those keys.
+`ANTHROPIC_MODEL`. `CLAUDE_CODE_ATTRIBUTION_HEADER=0` keeps Claude Code from prepending its
+billing attribution block: Cruise flattens `system` to one string for every upstream, so the
+block would otherwise reach the model as prompt text ([gateway protocol](https://code.claude.com/docs/en/llm-gateway-protocol.md#system-prompt-attribution-block)).
+The helper reads the key from the environment at run time, so the key itself never enters the
+settings file; Claude Code sends the helper's output in both headers Cruise accepts. Then tell
+them to restart Claude Code and run `/status`: the base URL should be Cruise's and the
+credential source `apiKeyHelper`. To undo, remove those keys.
 
 ## 4. The spend status line (optional — ask first)
 

@@ -23,7 +23,7 @@ serves plugins from a private registry mirror. Point an entry at it:
 ```json
 {
   "name": "cruise",
-  "source": { "source": "npm", "package": "@bytesbrains/claude-code-cruise", "version": "^0.1.3" }
+  "source": { "source": "npm", "package": "@bytesbrains/claude-code-cruise", "version": "^0.1.4" }
 }
 ```
 

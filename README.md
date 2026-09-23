@@ -6,7 +6,7 @@
 
 <p align="center">
   <a href="https://github.com/bytesbrains/cruise-claude-plugin/actions/workflows/ci.yml"><img src="https://github.com/bytesbrains/cruise-claude-plugin/actions/workflows/ci.yml/badge.svg?branch=main" alt="CI" /></a>
-  <a href="plugins/cruise/.claude-plugin/plugin.json"><img src="https://img.shields.io/github/package-json/v/bytesbrains/cruise-claude-plugin?label=plugin&amp;color=3b82f6" alt="Plugin version" /></a>
+  <a href="https://www.npmjs.com/package/@bytesbrains/claude-code-cruise"><img src="https://img.shields.io/npm/v/@bytesbrains/claude-code-cruise?label=npm&amp;color=3b82f6" alt="npm" /></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-Apache--2.0-22d3ee" alt="License: Apache-2.0" /></a>
   <a href="https://bytesbrains.com/cruise"><img src="https://img.shields.io/badge/product-bytesbrains.com%2Fcruise-a855f7" alt="Product" /></a>
 </p>
@@ -37,10 +37,12 @@ with a `cru_demo_` key.
 
 ### From npm
 
-The plugin is also published to npm as
+Every release is also published to npm as
 [`@bytesbrains/claude-code-cruise`](https://www.npmjs.com/package/@bytesbrains/claude-code-cruise),
-with provenance. It is for your own marketplace, for example an internal one that pins versions
-or mirrors a registry. Point an entry at it:
+at the same version as the marketplace. Releases from v0.1.4 on are published by this repo's
+release workflow, with [provenance](https://docs.npmjs.com/generating-provenance-statements)
+linking the package to the commit it was built from. The package is for your own marketplace,
+for example an internal one that pins versions or mirrors a registry. Point an entry at it:
 
 ```json
 { "name": "cruise", "source": { "source": "npm", "package": "@bytesbrains/claude-code-cruise" } }
@@ -65,6 +67,17 @@ or mirrors a registry. Point an entry at it:
   extended-thinking blocks and prompt caching do not survive the trip, and Claude Code turns off
   on-demand tool search behind any gateway.
 - The plugin never writes your key anywhere. It reaches only the Cruise base URL you configure.
+
+## Links
+
+| | |
+|---|---|
+| Product | [bytesbrains.com/cruise](https://bytesbrains.com/cruise) |
+| Cruise docs | [cruise.bytesbrains.net/docs](https://cruise.bytesbrains.net/docs) |
+| Marketplace | `/plugin marketplace add bytesbrains/cruise-claude-plugin` |
+| npm | [`@bytesbrains/claude-code-cruise`](https://www.npmjs.com/package/@bytesbrains/claude-code-cruise) |
+| Releases | [tags](https://github.com/bytesbrains/cruise-claude-plugin/tags). The plugin's version is in [`plugin.json`](plugins/cruise/.claude-plugin/plugin.json) |
+| Issues and security | [issues](https://github.com/bytesbrains/cruise-claude-plugin/issues). Report vulnerabilities as [`SECURITY.md`](SECURITY.md) describes, not in an issue |
 
 ## Development
 

@@ -1,0 +1,152 @@
+# A `v*` tag on main publishes plugins/cruise to npm as
+# @bytesbrains/claude-code-cruise. A merge is never a release.
+#
+# Cutting a release (CONTRIBUTING.md → Releasing):
+#   1. Bump the version in plugin.json and both package.json files in a PR.
+#   2. Merge it, then tag that commit on main: git tag v0.x.y origin/main && git push origin v0.x.y
+#   3. This workflow runs the checks, packs the tarball and checks that exact
+#      tarball (scripts/pack-check.mjs), then publishes it with provenance via
+#      npm trusted publishing (OIDC).
+#
+# workflow_dispatch defaults to dry_run (pack and check only). Publishing also
+# requires the run to be on a v* tag, so dry_run=false on a branch never
+# publishes; it is for re-running a tag whose publish failed.
+#
+# One-time npm setup: a Trusted Publisher for @bytesbrains/claude-code-cruise,
+#   Owner: bytesbrains  Repository: cruise-claude-plugin  Workflow: release.yml
+# Break-glass (and the very first publish, before the package exists on npm to
+# be configured): repository secret NPM_TOKEN.
+name: release
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: "Pack and check without publishing"
+        type: boolean
+        default: true
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Full history, so the tag can be checked against main.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version: 22
+          cache: npm
+          registry-url: https://registry.npmjs.org
+
+      - name: Install gitleaks and the Claude Code CLI
+        run: |
+          set -euo pipefail
+          curl -sSL -o /tmp/gitleaks.tar.gz \
+            https://github.com/gitleaks/gitleaks/releases/download/v8.24.3/gitleaks_8.24.3_linux_x64.tar.gz
+          echo "9991e0b2903da4c8f6122b5c3186448b927a5da4deef1fe45271c3793f4ee29c  /tmp/gitleaks.tar.gz" | sha256sum -c -
+          sudo tar -xzf /tmp/gitleaks.tar.gz -C /usr/local/bin gitleaks
+          npm install --global @anthropic-ai/claude-code
+          gitleaks version && claude --version
+
+      - run: npm ci
+
+      - name: Types
+        run: npm run typecheck
+
+      - name: Tests
+        run: npm test
+
+      - name: Validate marketplace and plugin
+        run: npm run validate
+
+      - name: Tag matches every version, and is on main
+        if: startsWith(github.ref, 'refs/tags/v')
+        run: |
+          set -euo pipefail
+          TAG="${GITHUB_REF_NAME#v}"
+          for f in plugins/cruise/.claude-plugin/plugin.json plugins/cruise/package.json package.json; do
+            V="$(node -p "require('./$f').version")"
+            if [ "$V" != "$TAG" ]; then
+              echo "::error::Tag v$TAG does not match $f version $V"
+              exit 1
+            fi
+          done
+          # A tag cut from a branch would publish code main never reviewed.
+          git fetch --no-tags --quiet origin +refs/heads/main:refs/remotes/origin/main
+          rc=0
+          git merge-base --is-ancestor "$GITHUB_SHA" origin/main || rc=$?
+          if [ "$rc" -eq 1 ]; then
+            echo "::error::$GITHUB_REF_NAME ($GITHUB_SHA) is not on main. Merge the release PR, then tag main."
+            exit 1
+          elif [ "$rc" -ne 0 ]; then
+            echo "::error::Could not check $GITHUB_SHA against main (git exit $rc)"
+            exit "$rc"
+          fi
+
+      - name: Pack, and check the tarball that will ship
+        id: pack
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/pack"
+          npm run -s pack:check -- --out "$RUNNER_TEMP/pack" | tee "$RUNNER_TEMP/pack.log"
+          echo "tarball=$(tail -n 1 "$RUNNER_TEMP/pack.log")" >> "$GITHUB_OUTPUT"
+
+      - name: Decide whether to publish
+        id: gate
+        env:
+          EVENT: ${{ github.event_name }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          if [ "$EVENT" = "workflow_dispatch" ] && [ "$DRY_RUN" != "false" ]; then
+            echo "publish=false" >> "$GITHUB_OUTPUT"; echo "Dry run: packed and checked only"
+          elif [[ "$GITHUB_REF" == refs/tags/v* ]]; then
+            echo "publish=true" >> "$GITHUB_OUTPUT"; echo "Publishing"
+          else
+            echo "publish=false" >> "$GITHUB_OUTPUT"; echo "Not a v* tag: packed and checked only"
+          fi
+
+      - name: Publish to npm
+        if: steps.gate.outputs.publish == 'true'
+        env:
+          TARBALL: ${{ steps.pack.outputs.tarball }}
+          # Only the break-glass path sets a token; an empty one blocks OIDC.
+          NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: |
+          set -euo pipefail
+          # Trusted publishing needs npm 11.5.1 or later; upgraded only now,
+          # after the tests ran on the npm that ships with Node 22.
+          npm install --global npm@11.5.1
+          if [ -n "${NPM_TOKEN:-}" ]; then
+            # setup-node's .npmrc already reads ${NODE_AUTH_TOKEN}.
+            echo "Using the break-glass NPM_TOKEN"
+            export NODE_AUTH_TOKEN="$NPM_TOKEN"
+          else
+            # setup-node's _authToken line (and its placeholder token) would
+            # win over OIDC, so it goes; only the empty or placeholder forms.
+            echo "Using npm trusted publishing (OIDC)"
+            for f in .npmrc "$HOME/.npmrc" "${NPM_CONFIG_USERCONFIG:-}"; do
+              if [ -n "$f" ] && [ -f "$f" ]; then
+                sed -i -E '/_authToken[[:space:]]*=[[:space:]]*(\$\{NODE_AUTH_TOKEN\})?[[:space:]]*$/d' "$f"
+              fi
+            done
+            unset NODE_AUTH_TOKEN || true
+          fi
+          # The exact tarball pack:check held, with provenance either way.
+          npm publish "$TARBALL" --access public --provenance

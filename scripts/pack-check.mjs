@@ -10,7 +10,7 @@
 // Prints the tarball's path last. gitleaks and the `claude` CLI are required:
 // a check that could not run is a failure, not a pass.
 import { execFileSync } from "node:child_process";
-import { mkdtempSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
 
@@ -31,6 +31,8 @@ const CRUISE_KEY = /cru_(live|test|demo|svc)_[A-Za-z0-9]{8,}/;
 
 const outFlag = process.argv.indexOf("--out");
 const out = outFlag === -1 ? mkdtempSync(path.join(tmpdir(), "cruise-pack-")) : path.resolve(process.argv[outFlag + 1]);
+// npm pack refuses a destination that does not exist yet.
+mkdirSync(out, { recursive: true });
 
 function fail(message) {
   console.error(`pack:check: ${message}`);

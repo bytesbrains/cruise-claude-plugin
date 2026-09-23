@@ -117,7 +117,14 @@ jobs:
           if [ "$EVENT" = "workflow_dispatch" ] && [ "$DRY_RUN" != "false" ]; then
             echo "publish=false" >> "$GITHUB_OUTPUT"; echo "Dry run: packed and checked only"
           elif [[ "$GITHUB_REF" == refs/tags/v* ]]; then
-            echo "publish=true" >> "$GITHUB_OUTPUT"; echo "Publishing"
+            # A version already on npm (published by hand, or by an earlier run
+            # of this tag) is done, not a failure: npm would refuse it anyway.
+            SPEC="$(node -p 'const p = require("./plugins/cruise/package.json"); `${p.name}@${p.version}`')"
+            if npm view "$SPEC" version >/dev/null 2>&1; then
+              echo "publish=false" >> "$GITHUB_OUTPUT"; echo "::notice::$SPEC is already on npm; nothing to publish"
+            else
+              echo "publish=true" >> "$GITHUB_OUTPUT"; echo "Publishing $SPEC"
+            fi
           else
             echo "publish=false" >> "$GITHUB_OUTPUT"; echo "Not a v* tag: packed and checked only"
           fi

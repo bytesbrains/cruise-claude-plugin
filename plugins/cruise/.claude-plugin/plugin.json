@@ -1,8 +1,8 @@
 {
   "name": "cruise",
   "displayName": "BytesBrains Cruise",
-  "version": "0.1.6",
-  "description": "Your Cruise key's models, budget and spend over MCP, /cruise:models and /cruise:switch commands, a skill for choosing lanes and reading Cruise's refusals, a spend status line, and /cruise:setup to route Claude Code's models through Cruise.",
+  "version": "0.1.7",
+  "description": "Your Cruise key's models, budget and spend over MCP, slash commands (/cruise:connect, /cruise:disconnect, /cruise:models, /cruise:switch), a skill for lanes and refusals, a spend status line, and guided setup.",
   "author": {
     "name": "BytesBrains",
     "url": "https://bytesbrains.com"

@@ -52,4 +52,4 @@ Group models by provider family (Anthropic, DeepSeek, Google, Mistral, Workers A
 Check the current active model in Claude Code:
 - Look up `env.ANTHROPIC_MODEL` in `~/.claude/settings.json` (or the `ANTHROPIC_MODEL` environment variable).
 - Clearly highlight whether Claude Code is currently configured with a lane (e.g. `bb/agentic-coding`) or a pinned model.
-- Inform the user that they can switch models by updating `ANTHROPIC_MODEL` in `~/.claude/settings.json`.
+- Inform the user that they can switch models with `/cruise:switch <model-or-lane>` or by updating `ANTHROPIC_MODEL` in `~/.claude/settings.json`.

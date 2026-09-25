@@ -106,12 +106,14 @@ describe("the skills", () => {
 describe("the commands", () => {
   it("each provide a valid frontmatter description", () => {
     const commands = readdirSync(path.join(PLUGIN, "commands"));
-    expect(commands.sort()).toEqual(["models.md"]);
+    expect(commands.sort()).toEqual(["models.md", "switch.md"]);
     for (const cmd of commands) {
       const text = readFileSync(path.join(PLUGIN, "commands", cmd), "utf8");
       const front = /^---\n([\s\S]*?)\n---/.exec(text)?.[1] ?? "";
       expect(front, cmd).toMatch(/^description: .{20,}$/m);
     }
+    // Switch edits the user's settings; the model must not decide to run it.
+    expect(readFileSync(path.join(PLUGIN, "commands/switch.md"), "utf8")).toMatch(/^disable-model-invocation: true$/m);
   });
 
   it("commands do not expose credentials on command line or leak keys", () => {

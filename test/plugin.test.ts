@@ -103,6 +103,18 @@ describe("the skills", () => {
   });
 });
 
+describe("the commands", () => {
+  it("each provide a valid frontmatter description", () => {
+    const commands = readdirSync(path.join(PLUGIN, "commands"));
+    expect(commands.sort()).toEqual(["models.md"]);
+    for (const cmd of commands) {
+      const text = readFileSync(path.join(PLUGIN, "commands", cmd), "utf8");
+      const front = /^---\n([\s\S]*?)\n---/.exec(text)?.[1] ?? "";
+      expect(front, cmd).toMatch(/^description: .{20,}$/m);
+    }
+  });
+});
+
 describe("the status line script", () => {
   const script = path.join(PLUGIN, "scripts/statusline.sh");
   const run = (env: Record<string, string>) =>

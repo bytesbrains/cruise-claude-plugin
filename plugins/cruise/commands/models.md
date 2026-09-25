@@ -12,8 +12,20 @@ Call the `cruise` MCP server's `list_models` tool.
 If the MCP server is not answering or unconfigured, query the models endpoint directly:
 
 ```sh
-test -n "$CRUISE_API_KEY" || { echo "CRUISE_API_KEY is not set"; exit 1; }
-curl -s -H "Authorization: Bearer ${CRUISE_API_KEY}" "${CRUISE_BASE_URL:-https://cruise.bytesbrains.net}/v1/models"
+if [ -z "${CRUISE_API_KEY:-}" ]; then
+  echo "Cruise: set CRUISE_API_KEY"
+  exit 1
+fi
+
+case "$CRUISE_API_KEY" in
+  *[!A-Za-z0-9_-]*)
+    echo "Cruise: CRUISE_API_KEY is not a Cruise key"
+    exit 1
+    ;;
+esac
+
+printf 'header = "Authorization: Bearer %s"\n' "$CRUISE_API_KEY" | \
+  curl -s -m 5 -K - "${CRUISE_BASE_URL:-https://cruise.bytesbrains.net}/v1/models"
 ```
 
 ## 2. Present the Catalogue
@@ -40,4 +52,4 @@ Group models by provider family (Anthropic, DeepSeek, Google, Mistral, Workers A
 Check the current active model in Claude Code:
 - Look up `env.ANTHROPIC_MODEL` in `~/.claude/settings.json` (or the `ANTHROPIC_MODEL` environment variable).
 - Clearly highlight whether Claude Code is currently configured with a lane (e.g. `bb/agentic-coding`) or a pinned model.
-- Inform the user that they can switch models by updating `ANTHROPIC_MODEL` in `~/.claude/settings.json` or invoking `/cruise:switch`.
+- Inform the user that they can switch models by updating `ANTHROPIC_MODEL` in `~/.claude/settings.json`.

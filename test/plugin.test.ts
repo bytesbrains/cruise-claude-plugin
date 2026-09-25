@@ -113,6 +113,16 @@ describe("the commands", () => {
       expect(front, cmd).toMatch(/^description: .{20,}$/m);
     }
   });
+
+  it("commands do not expose credentials on command line or leak keys", () => {
+    const commands = readdirSync(path.join(PLUGIN, "commands"));
+    for (const cmd of commands) {
+      const text = readFileSync(path.join(PLUGIN, "commands", cmd), "utf8");
+      expect(text, cmd).not.toMatch(/cru_(live|test|demo|svc)_[A-Za-z0-9]{8,}/);
+      // Key should not be passed directly in -H argument where it is visible in ps
+      expect(text, cmd).not.toMatch(/-H\s+["']Authorization:\s*Bearer\s*\$\{?CRUISE_API_KEY/i);
+    }
+  });
 });
 
 describe("the status line script", () => {

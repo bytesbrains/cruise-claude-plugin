@@ -103,6 +103,28 @@ describe("the skills", () => {
   });
 });
 
+describe("the commands", () => {
+  it("each provide a valid frontmatter description", () => {
+    const commands = readdirSync(path.join(PLUGIN, "commands"));
+    expect(commands.sort()).toEqual(["models.md"]);
+    for (const cmd of commands) {
+      const text = readFileSync(path.join(PLUGIN, "commands", cmd), "utf8");
+      const front = /^---\n([\s\S]*?)\n---/.exec(text)?.[1] ?? "";
+      expect(front, cmd).toMatch(/^description: .{20,}$/m);
+    }
+  });
+
+  it("commands do not expose credentials on command line or leak keys", () => {
+    const commands = readdirSync(path.join(PLUGIN, "commands"));
+    for (const cmd of commands) {
+      const text = readFileSync(path.join(PLUGIN, "commands", cmd), "utf8");
+      expect(text, cmd).not.toMatch(/cru_(live|test|demo|svc)_[A-Za-z0-9]{8,}/);
+      // Key should not be passed directly in -H argument where it is visible in ps
+      expect(text, cmd).not.toMatch(/-H\s+["']Authorization:\s*Bearer\s*\$\{?CRUISE_API_KEY/i);
+    }
+  });
+});
+
 describe("the status line script", () => {
   const script = path.join(PLUGIN, "scripts/statusline.sh");
   const run = (env: Record<string, string>) =>

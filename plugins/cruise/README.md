@@ -23,7 +23,7 @@ serves plugins from a private registry mirror. Point an entry at it:
 ```json
 {
   "name": "cruise",
-  "source": { "source": "npm", "package": "@bytesbrains/claude-code-cruise", "version": "^0.1.4" }
+  "source": { "source": "npm", "package": "@bytesbrains/claude-code-cruise", "version": "^0.1.5" }
 }
 ```
 
@@ -37,6 +37,7 @@ export CRUISE_API_KEY=cru_live_…
 
 - **MCP server `cruise`**: three read-only tools, `list_models`, `get_budget` and `get_spend`,
   about your key's own project.
+- **Command `/cruise:models`**: list reachable models and lanes with pricing and active selection.
 - **Skill `cruise`**: choosing a lane or a pinned model, and what each Cruise refusal means.
 - **Skill `/cruise:setup`**: guided setup. It runs only when you invoke it, and asks before it
   changes any file.

@@ -53,14 +53,16 @@ for example an internal one that pins versions or mirrors a registry. Point an e
 | | |
 |---|---|
 | **MCP server `cruise`** | Three read-only tools about your key's own project: `list_models` (models and lanes you can reach, with prices), `get_budget` (what is left, and whether the next request is served), `get_spend` (a month's charges by model or lane). Reads `CRUISE_API_KEY` and `CRUISE_BASE_URL` from the environment |
+| **Command `/cruise:models`** | List available Cruise models and lanes with pricing, capabilities, and active selection |
 | **Skill `cruise`** | When Claude works through Cruise: choosing a lane or a pinned model, and what each Cruise refusal means — `budget_exhausted` waits for the period, `wallet_exhausted` needs credit |
 | **Skill `/cruise:setup`** | The guided setup above. Runs only when you invoke it, and asks before changing any file |
 | **Status line** | Your project's spend this budget period and its state, cached for a minute. Installed by `/cruise:setup` |
 
 ## Try it
 
-Once `/cruise:setup` reports the MCP server answering, ask Claude:
+Once `/cruise:setup` reports the MCP server answering:
 
+- **`/cruise:models`** → View reachable models, lanes, and pricing
 - *"Which Cruise models and lanes can this key reach, and what do they cost?"* → `list_models`
 - *"How much of this project's Cruise budget is left, and will my next request be served?"* →
   `get_budget`

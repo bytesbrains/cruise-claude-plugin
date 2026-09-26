@@ -53,6 +53,8 @@ for example an internal one that pins versions or mirrors a registry. Point an e
 | | |
 |---|---|
 | **MCP server `cruise`** | Three read-only tools about your key's own project: `list_models` (models and lanes you can reach, with prices), `get_budget` (what is left, and whether the next request is served), `get_spend` (a month's charges by model or lane). Reads `CRUISE_API_KEY` and `CRUISE_BASE_URL` from the environment |
+| **Command `/cruise:connect`** | Route Claude Code through Cruise and install the spend status line in one step |
+| **Command `/cruise:disconnect`** | Disconnect from Cruise gateway and restore standard Anthropic routing |
 | **Command `/cruise:models`** | List available Cruise models and lanes with pricing, capabilities, and active selection |
 | **Command `/cruise:switch`** | Switch Claude Code's active model or lane in `~/.claude/settings.json` |
 | **Skill `cruise`** | When Claude works through Cruise: choosing a lane or a pinned model, and what each Cruise refusal means — `budget_exhausted` waits for the period, `wallet_exhausted` needs credit |
@@ -61,8 +63,10 @@ for example an internal one that pins versions or mirrors a registry. Point an e
 
 ## Try it
 
-Once `/cruise:setup` reports the MCP server answering:
+Once `/cruise:setup` (or `/cruise:connect`) reports the MCP server answering:
 
+- **`/cruise:connect`** → Enable Cruise gateway routing and status line in 1 step
+- **`/cruise:disconnect`** → Revert to native Anthropic subscription routing
 - **`/cruise:models`** → View reachable models, lanes, and pricing
 - **`/cruise:switch <model-or-lane>`** → Switch active model (e.g. `/cruise:switch bb/agentic-coding`)
 - *"Which Cruise models and lanes can this key reach, and what do they cost?"* → `list_models`

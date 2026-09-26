@@ -23,11 +23,11 @@ serves plugins from a private registry mirror. Point an entry at it:
 ```json
 {
   "name": "cruise",
-  "source": { "source": "npm", "package": "@bytesbrains/claude-code-cruise", "version": "^0.1.6" }
+  "source": { "source": "npm", "package": "@bytesbrains/claude-code-cruise", "version": "^0.1.7" }
 }
 ```
 
-Then put a Cruise key in your environment, restart Claude Code and run `/cruise:setup`:
+Then put a Cruise key in your environment, restart Claude Code and run `/cruise:setup` (or `/cruise:connect`):
 
 ```sh
 export CRUISE_API_KEY=cru_live_…
@@ -37,6 +37,8 @@ export CRUISE_API_KEY=cru_live_…
 
 - **MCP server `cruise`**: three read-only tools, `list_models`, `get_budget` and `get_spend`,
   about your key's own project.
+- **Command `/cruise:connect`**: route Claude Code through Cruise and install the status line in 1 step.
+- **Command `/cruise:disconnect`**: disconnect from Cruise and revert to standard Anthropic routing.
 - **Command `/cruise:models`**: list reachable models and lanes with pricing and active selection.
 - **Command `/cruise:switch`**: switch Claude Code's active model or lane in `~/.claude/settings.json`.
 - **Skill `cruise`**: choosing a lane or a pinned model, and what each Cruise refusal means.

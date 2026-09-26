@@ -8,6 +8,7 @@
 import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
@@ -172,6 +173,9 @@ describe("the commands", () => {
     expect(connect).toMatch(/Preserve all unrelated environment variables/i);
     expect(connect).toMatch(/apiKeyHelper/);
     expect(connect).toMatch(/printf %s \\"\$CRUISE_API_KEY\\"/);
+    expect(connect).toMatch(/x-cruise-class: agentic/);
+    expect(connect).toMatch(/x-cruise-session/);
+    expect(connect).toMatch(/ANTHROPIC_CUSTOM_HEADERS/);
 
     const disconnect = readFileSync(path.join(PLUGIN, "commands/disconnect.md"), "utf8");
     // Guard against running when no cruise config
@@ -179,6 +183,9 @@ describe("the commands", () => {
     // Surgical removal of Cruise keys while preserving user settings
     expect(disconnect).toMatch(/Preserve all other environment variables/i);
     expect(disconnect).toMatch(/\*bytesbrains\*/);
+    expect(disconnect).toMatch(/ANTHROPIC_CUSTOM_HEADERS/);
+    expect(disconnect).toMatch(/x-cruise-class/);
+    expect(disconnect).toMatch(/x-cruise-session/);
   });
 });
 
@@ -265,6 +272,8 @@ describe("the status line script", () => {
 
 describe("the CLI bootstrapper", () => {
   const cli = path.join(PLUGIN, "bin/cli.js");
+  const require = createRequire(import.meta.url);
+  const { mergeCustomHeaders, cleanCustomHeaders } = require(cli);
   const runCli = (args: string[], env: Record<string, string> = {}) =>
     spawnSync(process.execPath, [cli, ...args], {
       encoding: "utf8",
@@ -359,12 +368,141 @@ describe("the CLI bootstrapper", () => {
     expect(settings.env.ANTHROPIC_BASE_URL).toBe("https://cruise-demo.bytesbrains.net");
     expect(settings.env.ANTHROPIC_DEFAULT_HAIKU_MODEL).toBe("bb/chat-assistant");
     expect(settings.env.CLAUDE_CODE_ATTRIBUTION_HEADER).toBe("0");
+    expect(settings.env.ANTHROPIC_CUSTOM_HEADERS).toMatch(/x-cruise-class: agentic/);
+    expect(settings.env.ANTHROPIC_CUSTOM_HEADERS).toMatch(/x-cruise-session: claude-code-[A-Za-z0-9-]+/);
     expect(settings.apiKeyHelper).toBe('printf %s "$CRUISE_API_KEY"');
     // Points to custom CLAUDE_CONFIG_DIR path
     expect(settings.statusLine).toEqual({
       type: "command",
       command: path.join(tmp, "cruise-statusline.sh"),
     });
+  });
+
+  it("enable supports explicit --session-id and validates session format", () => {
+    const tmp = mkdtempSync(path.join(tmpdir(), "cruise-cli-test-"));
+    const settingsPath = path.join(tmp, "settings.json");
+
+    // Invalid session ID with disallowed chars
+    const invalidOut = runCli(["enable", "--session-id", "invalid session with spaces!"], {
+      CLAUDE_CONFIG_DIR: tmp,
+      CRUISE_API_KEY: LIVE_KEY,
+    });
+    expect(invalidOut.status).toBe(1);
+    expect(invalidOut.stderr).toMatch(/Cruise session ID must be 1–128 characters/);
+
+    // Valid session ID
+    const validOut = runCli(["enable", "--session-id", "session_abc.123:test-run"], {
+      CLAUDE_CONFIG_DIR: tmp,
+      CRUISE_API_KEY: LIVE_KEY,
+    });
+    expect(validOut.status).toBe(0);
+    const settings = JSON.parse(readFileSync(settingsPath, "utf8"));
+    expect(settings.env.ANTHROPIC_CUSTOM_HEADERS).toMatch(/x-cruise-session: session_abc\.123:test-run/);
+    expect(settings.env.ANTHROPIC_CUSTOM_HEADERS).toMatch(/x-cruise-class: agentic/);
+  });
+
+  it("enable rejects --session-id without an argument and empty session ID", () => {
+    const tmp = mkdtempSync(path.join(tmpdir(), "cruise-cli-test-"));
+
+    const missingArg = runCli(["enable", "--session-id"], {
+      CLAUDE_CONFIG_DIR: tmp,
+      CRUISE_API_KEY: LIVE_KEY,
+    });
+    expect(missingArg.status).toBe(1);
+    expect(missingArg.stderr).toMatch(/Option '--session-id' requires an argument/);
+
+    const missingShortArg = runCli(["enable", "-s"], {
+      CLAUDE_CONFIG_DIR: tmp,
+      CRUISE_API_KEY: LIVE_KEY,
+    });
+    expect(missingShortArg.status).toBe(1);
+    expect(missingShortArg.stderr).toMatch(/Option '--session-id' requires an argument/);
+
+    const emptyArg = runCli(["enable", "--session-id="], {
+      CLAUDE_CONFIG_DIR: tmp,
+      CRUISE_API_KEY: LIVE_KEY,
+    });
+    expect(emptyArg.status).toBe(1);
+    expect(emptyArg.stderr).toMatch(/Cruise session ID must be 1–128 characters/);
+  });
+
+  it("mergeCustomHeaders deduplicates headers and cleans whitespace lines", () => {
+    const raw = "  \n  x-cruise-class: custom\nx-cruise-class: old\n  x-cruise-session: session-1  \nx-cruise-session: session-2\n  \nX-Custom: value\n";
+    const merged = mergeCustomHeaders(raw);
+    const lines = merged.split("\n");
+    expect(lines).toEqual([
+      "x-cruise-class: agentic",
+      "x-cruise-session: session-1",
+      "X-Custom: value",
+    ]);
+
+    const overridden = mergeCustomHeaders(raw, "new-session");
+    expect(overridden.split("\n")).toEqual([
+      "x-cruise-class: agentic",
+      "x-cruise-session: new-session",
+      "X-Custom: value",
+    ]);
+  });
+
+  it("cleanCustomHeaders ignores whitespace-only lines and removes Cruise headers cleanly", () => {
+    const raw = "   \n  x-cruise-class: agentic\n  \n  x-cruise-session: sid\n   ";
+    const { cleaned, removedCruiseHeaders } = cleanCustomHeaders(raw);
+    expect(removedCruiseHeaders).toBe(true);
+    expect(cleaned).toBeUndefined();
+
+    const withOther = "   \n  x-cruise-class: agentic\n  X-Other: 1  \n   ";
+    const result2 = cleanCustomHeaders(withOther);
+    expect(result2.removedCruiseHeaders).toBe(true);
+    expect(result2.cleaned).toBe("X-Other: 1");
+  });
+
+  it("enable preserves non-Cruise custom headers and pre-existing session ID", () => {
+    const tmp = mkdtempSync(path.join(tmpdir(), "cruise-cli-test-"));
+    const settingsPath = path.join(tmp, "settings.json");
+
+    // Pre-populate with existing custom headers
+    writeFileSync(
+      settingsPath,
+      JSON.stringify({
+        env: {
+          ANTHROPIC_CUSTOM_HEADERS: "X-Trace-Id: trace-999\nx-cruise-session: existing-session-42",
+        },
+      }),
+    );
+
+    // Run enable without overriding session
+    const out = runCli(["enable"], {
+      CLAUDE_CONFIG_DIR: tmp,
+      CRUISE_API_KEY: LIVE_KEY,
+    });
+    expect(out.status).toBe(0);
+
+    const settings = JSON.parse(readFileSync(settingsPath, "utf8"));
+    const headers = settings.env.ANTHROPIC_CUSTOM_HEADERS;
+    expect(headers).toMatch(/X-Trace-Id: trace-999/);
+    expect(headers).toMatch(/x-cruise-class: agentic/);
+    expect(headers).toMatch(/x-cruise-session: existing-session-42/);
+  });
+
+  it("disable removes Cruise custom headers while preserving third-party custom headers", () => {
+    const tmp = mkdtempSync(path.join(tmpdir(), "cruise-cli-test-"));
+    const settingsPath = path.join(tmp, "settings.json");
+
+    // Enable first
+    runCli(["enable"], { CLAUDE_CONFIG_DIR: tmp, CRUISE_API_KEY: LIVE_KEY });
+
+    // Inject third party header alongside cruise headers
+    let settings = JSON.parse(readFileSync(settingsPath, "utf8"));
+    settings.env.ANTHROPIC_CUSTOM_HEADERS += "\nX-Other-Proxy: active";
+    writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
+
+    // Disable
+    const disableOut = runCli(["disable"], { CLAUDE_CONFIG_DIR: tmp });
+    expect(disableOut.status).toBe(0);
+
+    const cleaned = JSON.parse(readFileSync(settingsPath, "utf8"));
+    expect(cleaned.env.ANTHROPIC_CUSTOM_HEADERS).toBe("X-Other-Proxy: active");
+    expect(cleaned.env.ANTHROPIC_BASE_URL).toBeUndefined();
   });
 
   it("disable safely removes Cruise config and preserves other user settings", () => {
@@ -437,6 +575,8 @@ describe("the CLI bootstrapper", () => {
     const after = runCli(["status"], { CLAUDE_CONFIG_DIR: tmp });
     expect(after.stdout).toMatch(/Enabled/);
     expect(after.stdout).toMatch(/https:\/\/cruise\.bytesbrains\.net/);
+    expect(after.stdout).toMatch(/Headers:\s+.*x-cruise-class: agentic/);
+    expect(after.stdout).toMatch(/x-cruise-session: claude-code-/);
   });
 });
 

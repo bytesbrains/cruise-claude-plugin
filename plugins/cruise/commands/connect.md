@@ -74,10 +74,15 @@ Read `~/.claude/settings.json` (initialize as `{}` if absent) and merge:
          "ANTHROPIC_BASE_URL": "<detected-base-url>",
          "ANTHROPIC_MODEL": "<current env.ANTHROPIC_MODEL or bb/agentic-coding>",
          "ANTHROPIC_DEFAULT_HAIKU_MODEL": "bb/chat-assistant",
-         "CLAUDE_CODE_ATTRIBUTION_HEADER": "0"
+         "CLAUDE_CODE_ATTRIBUTION_HEADER": "0",
+         "ANTHROPIC_CUSTOM_HEADERS": "x-cruise-class: agentic\nx-cruise-session: claude-code-<uuid>"
        }
      }
      ```
+   - **Gateway Custom Headers (`ANTHROPIC_CUSTOM_HEADERS`)**:
+     - `x-cruise-class: agentic`: Tags all Claude Code requests in the Cruise cost ledger under the `agentic` traffic class, separating agentic coding spend from interactive chat or batch pipelines.
+     - `x-cruise-session: claude-code-<id>`: Session affinity header (1–128 characters matching `[A-Za-z0-9._:-]`). Cruise uses this to pin member model selection for the duration of an agent workflow (1-hour sliding TTL refreshed per request) when routing through Cruise lanes like `bb/agentic-coding`. This prevents mid-session model shifts and maintains upstream prompt caching across multi-turn agent sessions.
+     - If `ANTHROPIC_CUSTOM_HEADERS` already exists, preserve existing non-Cruise custom headers (merge them newline-separated). Preserve any pre-existing `x-cruise-session` if already configured unless an explicit override is requested.
 2. **`apiKeyHelper`**:
    ```json
    {
@@ -98,8 +103,26 @@ Read `~/.claude/settings.json` (initialize as `{}` if absent) and merge:
 
 **IMPORTANT**: Preserve all other existing keys in `~/.claude/settings.json` (such as `enabledPlugins`, `mcpServers`, etc.).
 
-## 5. Confirm & Next Steps
+## 5. Gateway Session Affinity & Traffic Class Evaluation
 
-1. Display the summary of applied gateway settings and the diff.
+- **Prompt Caching on Lanes**:
+  Cruise lanes (such as `bb/agentic-coding`) dynamically allocate member models per request based on routing policy and gates. In multi-turn agentic coding sessions, if turn 1 routes to Model A and turn 2 routes to Model B, upstream prompt caching (Anthropic prompt cache / provider KV cache) is completely lost between turns, leading to increased token latency and cost.
+  Sending `x-cruise-session` pins member model selection for the session. The first turn allocates normally and returns `x-cruise-affinity: new`; subsequent turns with the same key maintain the pinned member (`x-cruise-affinity: pinned`), ensuring prompt cache hits across turns. Cruise enforces a 1-hour TTL on the pin (refreshed on each request), so idle sessions expire naturally without permanently locking an allocation.
+- **Session Identifier Strategies**:
+  1. *Stable Identifier in `settings.json` (Turnkey Default)*:
+     Configuring a stable session identifier (e.g. `claude-code-<uuid>`) in `settings.json` via `ANTHROPIC_CUSTOM_HEADERS` gives seamless out-of-the-box session affinity across multi-turn workflows. Cruise's 1-hour sliding inactivity TTL ensures that new agent workflows started after an idle period redraw fresh allocations.
+  2. *Per-Terminal Session Affinity (Shell Environment)*:
+     For power users running concurrent Claude Code instances across multiple terminal windows who want isolated affinity pins per shell session, `ANTHROPIC_CUSTOM_HEADERS` can be set in the shell profile (`~/.zshrc` or `~/.bashrc`):
+     ```sh
+     export ANTHROPIC_CUSTOM_HEADERS="x-cruise-class: agentic"$'\n'"x-cruise-session: $(uuidgen 2>/dev/null || cat /proc/sys/kernel/random/uuid 2>/dev/null || date +%s)"
+     ```
+  3. *Native Claude Code Session ID & Gateway Hint Headers*:
+     Claude Code automatically transmits `x-claude-code-session-id` on its HTTP calls, and setting `CLAUDE_CODE_GATEWAY_HINT_HEADERS=1` transmits `x-claude-code-prompt-id`. Cruise gateways can inspect `x-claude-code-session-id` as a fallback when `x-cruise-session` is not explicitly set.
+  4. *Status Line Separation*:
+     Claude Code passes `{ "session_id": "...", ... }` via stdin to the status line script, but the status line runs out-of-band asynchronously for UI rendering and cannot inject request headers into Claude Code's model calls. Request headers must be supplied via `settings.json` `env.ANTHROPIC_CUSTOM_HEADERS` or the process environment.
+
+## 6. Confirm & Next Steps
+
+1. Display the summary of applied gateway settings (including base URL, models, and custom headers) and the diff.
 2. Remind the user to restart Claude Code (`quit` and reopen) for the gateway routing to take effect.
 3. Advise them to run `/status` after restart to confirm that Base URL points to Cruise and Credential Source is `apiKeyHelper`.

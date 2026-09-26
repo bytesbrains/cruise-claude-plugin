@@ -50,7 +50,7 @@ npx @bytesbrains/claude-code-cruise disable
 - **CLI `claude-code-cruise`**: standalone bootstrapper (`npx @bytesbrains/claude-code-cruise enable/disable`) for zero-dependency offline setup.
 - **MCP server `cruise`**: three read-only tools, `list_models`, `get_budget` and `get_spend`,
   about your key's own project.
-- **Command `/cruise:connect`**: route Claude Code through Cruise and install the status line in 1 step.
+- **Command `/cruise:connect`**: route Claude Code through Cruise and install the status line in 1 step (including gateway session affinity and traffic class tagging).
 - **Command `/cruise:disconnect`**: disconnect from Cruise and revert to standard Anthropic routing.
 - **Command `/cruise:models`**: list reachable models and lanes with pricing and active selection.
 - **Command `/cruise:status`**: inspect current project budget limits, wallet balance, and serve/refuse status (`/cruise:budget`).

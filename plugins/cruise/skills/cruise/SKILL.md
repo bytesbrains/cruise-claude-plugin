@@ -28,8 +28,13 @@ changes anything.
 - `get_spend` — what a month cost, by model or by lane.
 
 Every Cruise response also says where things stand in headers: `x-cruise-model` (who answered),
-`x-cruise-lane`, `x-cruise-budget-state` / `-spend` / `-limit`, `x-cruise-wallet-state` /
-`-balance`, and `x-cruise-cache`.
+`x-cruise-lane`, `x-cruise-selection` (policy that chose), `x-cruise-affinity` (`new`, `pinned`, or `rebound`),
+`x-cruise-budget-state` / `-spend` / `-limit`, `x-cruise-wallet-state` / `-balance`, and `x-cruise-cache`.
+
+Cruise also supports gateway request headers for session affinity and attribution:
+- `x-cruise-class`: tags the request traffic class (`agentic`, `interactive`, `scheduled`) in the Cruise ledger.
+- `x-cruise-session`: pins lane member allocation for an agent run (1–128 characters of `[A-Za-z0-9._:-]`, 1-hour sliding TTL), keeping the same member model across multi-turn interactions so upstream prompt caching remains effective.
+
 
 ## Reading a refusal
 

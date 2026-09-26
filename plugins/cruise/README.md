@@ -33,15 +33,23 @@ Then put a Cruise key in your environment, restart Claude Code and run `/cruise:
 export CRUISE_API_KEY=cru_live_…
 ```
 
-### Standalone CLI Bootstrapper
+### Standalone CLI Bootstrapper & Launcher
 
-When a Claude subscription is expired or quota is exhausted, Claude Code fails before it can execute any slash command. To bootstrap offline:
+When a Claude subscription is expired or quota is exhausted, Claude Code fails before it can execute any slash command. To bootstrap offline or run on-demand:
 
 ```sh
-# Enable Cruise gateway routing & status line
+# Run Claude on-demand through Cruise without modifying global settings
+npx @bytesbrains/claude-code-cruise run [args...]
+# or binary alias:
+claude-cruise [args...]
+
+# Enable Cruise gateway routing & status line globally
 npx @bytesbrains/claude-code-cruise enable
 
-# Switch active model or lane
+# Or configure Cruise for the current project only (./.claude/settings.json)
+npx @bytesbrains/claude-code-cruise enable --local
+
+# Switch active model or lane (globally or with --local)
 npx @bytesbrains/claude-code-cruise switch bb/agentic-coding
 
 # Safely revert to standard Anthropic routing
@@ -50,7 +58,7 @@ npx @bytesbrains/claude-code-cruise disable
 
 ## What is inside
 
-- **CLI `claude-code-cruise`**: standalone bootstrapper (`npx @bytesbrains/claude-code-cruise enable/disable/switch`) for zero-dependency offline setup.
+- **CLI `claude-code-cruise` / `claude-cruise`**: standalone bootstrapper and on-demand launcher (`claude-cruise`, `run`, `enable`, `disable`, `switch`) for zero-dependency execution and project-level (`--local`) scope.
 - **MCP server `cruise`**: three read-only tools, `list_models`, `get_budget` and `get_spend`,
   about your key's own project.
 - **Command `/cruise:connect`**: route Claude Code through Cruise and install the status line in 1 step (including gateway session affinity and traffic class tagging).

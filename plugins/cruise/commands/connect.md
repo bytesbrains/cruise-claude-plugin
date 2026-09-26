@@ -63,7 +63,9 @@ fi
 
 ## 4. Update `~/.claude/settings.json`
 
-Read `~/.claude/settings.json` (initialize as `{}` if absent) and merge:
+If the user specifies `--local` (or runs in project mode), apply these settings to `./.claude/settings.json` in the current repository instead of `~/.claude/settings.json`.
+
+Read `~/.claude/settings.json` (or `./.claude/settings.json` if `--local`, initialized as `{}` if absent) and merge:
 
 1. **`env` configuration (Deep merge)**:
    - Read the existing `env` object. **Preserve all unrelated environment variables** (e.g. custom user variables like `FOO`, `BAR`, etc.).

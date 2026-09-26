@@ -6,7 +6,7 @@
 // says when it applies, and the status line prints what it should from the
 // answer Cruise actually gives.
 import { execFileSync, spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, existsSync, mkdtempSync, readdirSync, readFileSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
@@ -23,6 +23,8 @@ const {
   migrateSettings,
   mergeCustomHeaders,
   cleanCustomHeaders,
+  getCruiseEnv,
+  runClaude,
 } = require(CLI);
 const json = (file: string) => JSON.parse(readFileSync(path.join(ROOT, file), "utf8")) as Record<string, any>;
 
@@ -64,6 +66,7 @@ describe("the npm package", () => {
       bin: {
         "claude-code-cruise": "bin/cli.js",
         cruise: "bin/cli.js",
+        "claude-cruise": "bin/cli.js",
       },
       repository: { url: "git+https://github.com/bytesbrains/cruise-claude-plugin.git", directory: "plugins/cruise" },
       publishConfig: { access: "public", provenance: true },
@@ -779,6 +782,236 @@ describe("the CLI bootstrapper", () => {
     expect(stderr).toMatch(/Warning: Model "test\/no-tools-model" has tools: false in Cruise/);
     const settings = JSON.parse(readFileSync(settingsPath, "utf8"));
     expect(settings.env.ANTHROPIC_MODEL).toBe("test/no-tools-model");
+  });
+
+  it("getCruiseEnv returns all required gateway variables when CRUISE_API_KEY is valid", () => {
+    const originalKey = process.env.CRUISE_API_KEY;
+    try {
+      process.env.CRUISE_API_KEY = LIVE_KEY;
+      const res = getCruiseEnv();
+      expect(res.valid).toBe(true);
+      expect(res.env.ANTHROPIC_BASE_URL).toBe("https://cruise.bytesbrains.net");
+      expect(res.env.ANTHROPIC_MODEL).toBe("bb/agentic-coding");
+      expect(res.env.ANTHROPIC_DEFAULT_HAIKU_MODEL).toBe("bb/chat-assistant");
+      expect(res.env.CLAUDE_CODE_ATTRIBUTION_HEADER).toBe("0");
+      expect(res.env.CLAUDE_CODE_AUTO_MODE_SERVER).toBe("0");
+      expect(res.env.ANTHROPIC_CUSTOM_HEADERS).toMatch(/x-cruise-class: agentic/);
+      expect(res.env.ANTHROPIC_CUSTOM_HEADERS).toMatch(/x-cruise-session: claude-code-/);
+      expect(res.env.ANTHROPIC_AUTH_TOKEN).toBe(LIVE_KEY);
+      expect(res.env.ANTHROPIC_API_KEY).toBe(LIVE_KEY);
+    } finally {
+      if (originalKey === undefined) delete process.env.CRUISE_API_KEY;
+      else process.env.CRUISE_API_KEY = originalKey;
+    }
+  });
+
+  it("getCruiseEnv respects custom model and session ID overrides", () => {
+    const originalKey = process.env.CRUISE_API_KEY;
+    try {
+      process.env.CRUISE_API_KEY = LIVE_KEY;
+      const res = getCruiseEnv({ model: "google-ai-studio/gemini-3.8-flash", sessionId: "custom-sess-123" });
+      expect(res.valid).toBe(true);
+      expect(res.env.ANTHROPIC_MODEL).toBe("google-ai-studio/gemini-3.8-flash");
+      expect(res.env.ANTHROPIC_CUSTOM_HEADERS).toMatch(/x-cruise-session: custom-sess-123/);
+    } finally {
+      if (originalKey === undefined) delete process.env.CRUISE_API_KEY;
+      else process.env.CRUISE_API_KEY = originalKey;
+    }
+  });
+
+  it("run command fails when CRUISE_API_KEY is missing", () => {
+    const tmp = mkdtempSync(path.join(tmpdir(), "cruise-cli-test-"));
+    const out = runCli(["run", "-p", "hello"], { CLAUDE_CONFIG_DIR: tmp, CRUISE_API_KEY: "" });
+    expect(out.status).toBe(1);
+    expect(out.stderr).toMatch(/CRUISE_API_KEY is not set in your environment/);
+    expect(existsSync(path.join(tmp, "settings.json"))).toBe(false);
+  });
+
+  it("run command spawns claude with Cruise environment and leaves settings.json untouched", () => {
+    const tmp = mkdtempSync(path.join(tmpdir(), "cruise-cli-test-"));
+    const mockClaude = path.join(tmp, "mock-claude.js");
+    writeFileSync(
+      mockClaude,
+      `#!/usr/bin/env node
+console.log("MOCK_CLAUDE_RUN");
+console.log("ARGS:" + JSON.stringify(process.argv.slice(2)));
+console.log("BASE_URL:" + process.env.ANTHROPIC_BASE_URL);
+console.log("MODEL:" + process.env.ANTHROPIC_MODEL);
+console.log("AUTH_TOKEN:" + process.env.ANTHROPIC_AUTH_TOKEN);
+console.log("AUTO_MODE_SERVER:" + process.env.CLAUDE_CODE_AUTO_MODE_SERVER);
+console.log("ATTRIBUTION_HEADER:" + process.env.CLAUDE_CODE_ATTRIBUTION_HEADER);
+console.log("CUSTOM_HEADERS:" + process.env.ANTHROPIC_CUSTOM_HEADERS.replace(/\\n/g, ", "));
+`,
+      { mode: 0o755 }
+    );
+
+    const out = runCli(["run", "-p", "write a hello world"], {
+      CLAUDE_CONFIG_DIR: tmp,
+      CRUISE_API_KEY: LIVE_KEY,
+      CLAUDE_BIN: mockClaude,
+    });
+
+    expect(out.status).toBe(0);
+    expect(out.stdout).toMatch(/MOCK_CLAUDE_RUN/);
+    expect(out.stdout).toMatch(/ARGS:\["-p","write a hello world"\]/);
+    expect(out.stdout).toMatch(/BASE_URL:https:\/\/cruise\.bytesbrains\.net/);
+    expect(out.stdout).toMatch(/MODEL:bb\/agentic-coding/);
+    expect(out.stdout).toMatch(new RegExp(`AUTH_TOKEN:${LIVE_KEY}`));
+    expect(out.stdout).toMatch(/AUTO_MODE_SERVER:0/);
+    expect(out.stdout).toMatch(/ATTRIBUTION_HEADER:0/);
+    expect(out.stdout).toMatch(/CUSTOM_HEADERS:.*x-cruise-class: agentic/);
+
+    // Global settings file must NOT exist or be modified
+    expect(existsSync(path.join(tmp, "settings.json"))).toBe(false);
+  });
+
+  it("runClaude resolves exit code directly", async () => {
+    const tmp = mkdtempSync(path.join(tmpdir(), "cruise-cli-test-"));
+    const mockClaude = path.join(tmp, "mock-claude.js");
+    writeFileSync(mockClaude, `#!/usr/bin/env node\nprocess.exit(0);\n`, { mode: 0o755 });
+    const originalKey = process.env.CRUISE_API_KEY;
+    try {
+      process.env.CRUISE_API_KEY = LIVE_KEY;
+      const code = await runClaude(["-p", "test"], { claudeBin: mockClaude, stdio: "ignore" });
+      expect(code).toBe(0);
+    } finally {
+      if (originalKey === undefined) delete process.env.CRUISE_API_KEY;
+      else process.env.CRUISE_API_KEY = originalKey;
+    }
+  });
+
+  it("run command reports helpful error when claude binary is not found in PATH", () => {
+    const tmp = mkdtempSync(path.join(tmpdir(), "cruise-cli-test-"));
+    const out = runCli(["run"], {
+      CLAUDE_CONFIG_DIR: tmp,
+      CRUISE_API_KEY: LIVE_KEY,
+      CLAUDE_BIN: path.join(tmp, "non-existent-claude-bin"),
+    });
+    expect(out.status).toBe(1);
+    expect(out.stderr).toMatch(/Claude Code CLI .* not found in PATH/);
+    expect(out.stderr).toMatch(/npm install -g @anthropic-ai\/claude-code/);
+  });
+
+  it("claude-cruise binary alias launches claude with arguments", () => {
+    const tmp = mkdtempSync(path.join(tmpdir(), "cruise-cli-test-"));
+    const mockClaude = path.join(tmp, "mock-claude.js");
+    writeFileSync(
+      mockClaude,
+      `#!/usr/bin/env node
+console.log("ALIAS_LAUNCH:" + JSON.stringify(process.argv.slice(2)));
+console.log("MODEL:" + process.env.ANTHROPIC_MODEL);
+`,
+      { mode: 0o755 }
+    );
+
+    const aliasPath = path.join(tmp, "claude-cruise");
+    try {
+      symlinkSync(CLI, aliasPath);
+    } catch {
+      copyFileSync(CLI, aliasPath);
+      chmodSync(aliasPath, 0o755);
+    }
+
+    const out = spawnSync(aliasPath, ["--model", "google-ai-studio/gemini-3.8-flash", "-p", "test prompt"], {
+      encoding: "utf8",
+      env: {
+        PATH: process.env.PATH ?? "",
+        CLAUDE_CONFIG_DIR: tmp,
+        CRUISE_API_KEY: LIVE_KEY,
+        CLAUDE_BIN: mockClaude,
+      },
+    });
+
+    expect(out.status).toBe(0);
+    expect(out.stdout).toMatch(/ALIAS_LAUNCH:\["--model","google-ai-studio\/gemini-3.8-flash","-p","test prompt"\]/);
+    expect(out.stdout).toMatch(/MODEL:bb\/agentic-coding/);
+    expect(existsSync(path.join(tmp, "settings.json"))).toBe(false);
+  });
+
+  it("enable --local writes to ./.claude/settings.json in current directory and preserves global settings", () => {
+    const globalTmp = mkdtempSync(path.join(tmpdir(), "cruise-global-"));
+    const projectTmp = mkdtempSync(path.join(tmpdir(), "cruise-project-"));
+
+    const out = spawnSync(process.execPath, [CLI, "enable", "--local"], {
+      cwd: projectTmp,
+      encoding: "utf8",
+      env: {
+        PATH: process.env.PATH ?? "",
+        CLAUDE_CONFIG_DIR: globalTmp,
+        CRUISE_API_KEY: LIVE_KEY,
+      },
+    });
+
+    expect(out.status).toBe(0);
+    expect(out.stdout).toMatch(/BytesBrains Cruise gateway enabled for Claude Code \(project-level\)/);
+    expect(out.stdout).toMatch(/Status Line:\s+\.\/\.claude\/cruise-statusline\.sh/);
+
+    // Project-level settings exist
+    const localSettingsPath = path.join(projectTmp, ".claude/settings.json");
+    expect(existsSync(localSettingsPath)).toBe(true);
+    const localSettings = JSON.parse(readFileSync(localSettingsPath, "utf8"));
+    expect(localSettings.env.ANTHROPIC_BASE_URL).toBe("https://cruise.bytesbrains.net");
+    expect(localSettings.statusLine.command).toBe("./.claude/cruise-statusline.sh");
+    expect(existsSync(path.join(projectTmp, ".claude/cruise-statusline.sh"))).toBe(true);
+
+    // Global settings file was NEVER created
+    expect(existsSync(path.join(globalTmp, "settings.json"))).toBe(false);
+  });
+
+  it("status --local and switch --local operate on project-level settings", () => {
+    const globalTmp = mkdtempSync(path.join(tmpdir(), "cruise-global-"));
+    const projectTmp = mkdtempSync(path.join(tmpdir(), "cruise-project-"));
+
+    // Enable locally
+    spawnSync(process.execPath, [CLI, "enable", "-l"], {
+      cwd: projectTmp,
+      encoding: "utf8",
+      env: { PATH: process.env.PATH ?? "", CLAUDE_CONFIG_DIR: globalTmp, CRUISE_API_KEY: LIVE_KEY },
+    });
+
+    // Check status --local
+    const statusOut = spawnSync(process.execPath, [CLI, "status", "--local"], {
+      cwd: projectTmp,
+      encoding: "utf8",
+      env: { PATH: process.env.PATH ?? "", CLAUDE_CONFIG_DIR: globalTmp },
+    });
+    expect(statusOut.status).toBe(0);
+    expect(statusOut.stdout).toMatch(/Cruise LLM gateway \(project-level\): Enabled/);
+    expect(statusOut.stdout).toMatch(new RegExp(path.join(projectTmp, ".claude/settings.json")));
+
+    // Global status is still disabled
+    const globalStatusOut = spawnSync(process.execPath, [CLI, "status"], {
+      cwd: projectTmp,
+      encoding: "utf8",
+      env: { PATH: process.env.PATH ?? "", CLAUDE_CONFIG_DIR: globalTmp },
+    });
+    expect(globalStatusOut.status).toBe(0);
+    expect(globalStatusOut.stdout).toMatch(/Cruise LLM gateway: Disabled/);
+
+    // Switch model locally
+    const switchOut = spawnSync(process.execPath, [CLI, "switch", "bb/chat-assistant", "--local", "--skip-check"], {
+      cwd: projectTmp,
+      encoding: "utf8",
+      env: { PATH: process.env.PATH ?? "", CLAUDE_CONFIG_DIR: globalTmp },
+    });
+    expect(switchOut.status).toBe(0);
+    expect(switchOut.stdout).toMatch(/Active model switched to "bb\/chat-assistant" \(project-level\)/);
+
+    const localSettings = JSON.parse(readFileSync(path.join(projectTmp, ".claude/settings.json"), "utf8"));
+    expect(localSettings.env.ANTHROPIC_MODEL).toBe("bb/chat-assistant");
+
+    // Disable locally
+    const disableOut = spawnSync(process.execPath, [CLI, "disable", "--local"], {
+      cwd: projectTmp,
+      encoding: "utf8",
+      env: { PATH: process.env.PATH ?? "", CLAUDE_CONFIG_DIR: globalTmp },
+    });
+    expect(disableOut.status).toBe(0);
+    expect(disableOut.stdout).toMatch(/BytesBrains Cruise gateway disabled for Claude Code \(project-level\)/);
+
+    const cleanedLocalSettings = JSON.parse(readFileSync(path.join(projectTmp, ".claude/settings.json"), "utf8"));
+    expect(cleanedLocalSettings.env).toBeUndefined();
+    expect(cleanedLocalSettings.apiKeyHelper).toBeUndefined();
   });
 });
 

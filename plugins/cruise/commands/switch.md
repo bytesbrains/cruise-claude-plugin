@@ -27,13 +27,15 @@ Target model or lane requested by user: `$ARGUMENTS`
 
 > [!TIP]
 > If your current model lacks tool capability or fails to execute slash commands, you can switch models directly from your terminal without using Claude Code:
-> `npx @bytesbrains/claude-code-cruise switch <model-or-lane>`
+> `npx @bytesbrains/claude-code-cruise switch <model-or-lane>` (or add `--local` for project settings)
 
 ## 2. Update `~/.claude/settings.json`
 
+If `--local` is specified, update `./.claude/settings.json` in the current repository instead of `~/.claude/settings.json`.
+
 Once a valid model or lane is verified:
 
-1. Read `~/.claude/settings.json` (create it if absent).
+1. Read `~/.claude/settings.json` (or `./.claude/settings.json` if `--local`, create it if absent).
 2. Ensure the `env` object exists and set `"ANTHROPIC_MODEL": "<verified-model-or-lane>"`.
 3. **Preserve all other keys** in `settings.json` and within `env` (such as `ANTHROPIC_BASE_URL`, `CLAUDE_CODE_ATTRIBUTION_HEADER`, `apiKeyHelper`, `statusLine`, `enabledPlugins`, etc.). Never overwrite or discard existing settings.
 4. If `env.ANTHROPIC_BASE_URL` is not set, advise the user that model traffic is not yet routed through Cruise, and suggest running `/cruise:setup` to configure the gateway.

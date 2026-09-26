@@ -408,6 +408,91 @@ function status() {
   console.log(`  Config File:  ${settingsPath}`);
 }
 
+async function switchModel(targetModel, options = {}) {
+  if (!targetModel || typeof targetModel !== "string" || !targetModel.trim()) {
+    console.error("Error: Model or lane ID is required.");
+    console.error("Usage: npx @bytesbrains/claude-code-cruise switch <model-or-lane>");
+    console.error("Examples:");
+    console.error("  npx @bytesbrains/claude-code-cruise switch bb/agentic-coding");
+    console.error("  npx @bytesbrains/claude-code-cruise switch google-ai-studio/gemini-3.8-flash");
+    return false;
+  }
+
+  const modelId = targetModel.trim();
+  const settingsPath = getSettingsPath();
+  const claudeDir = getClaudeConfigDir();
+
+  let settings = {};
+  if (fs.existsSync(settingsPath)) {
+    try {
+      settings = JSON.parse(fs.readFileSync(settingsPath, "utf8"));
+    } catch {
+      console.error(`Error: Could not parse settings file at ${settingsPath}`);
+      return false;
+    }
+  } else {
+    if (!fs.existsSync(claudeDir)) {
+      fs.mkdirSync(claudeDir, { recursive: true });
+    }
+  }
+
+  if (!settings.env || typeof settings.env !== "object" || Array.isArray(settings.env)) {
+    settings.env = {};
+  }
+
+  const apiKey = process.env.CRUISE_API_KEY;
+  const baseUrl = detectBaseUrl(apiKey, process.env.CRUISE_BASE_URL || settings.env.ANTHROPIC_BASE_URL);
+
+  if (apiKey && !options.skipCheck && typeof fetch === "function") {
+    try {
+      const controller = new AbortController();
+      const timer = setTimeout(() => controller.abort(), 3000);
+      const res = await fetch(`${baseUrl}/v1/models`, {
+        headers: { Authorization: `Bearer ${apiKey}` },
+        signal: controller.signal,
+      });
+      clearTimeout(timer);
+      if (res.ok) {
+        const data = await res.json();
+        const found = Array.isArray(data?.data) ? data.data.find((m) => m.id === modelId) : null;
+        if (found) {
+          const hasTools = found["x-cruise"]?.tools;
+          if (hasTools === false) {
+            console.warn(`\n⚠️  Warning: Model "${modelId}" has tools: false in Cruise.`);
+            console.warn("   Claude Code requires tool calling to read/write files and execute bash commands.");
+            console.warn("   You may experience degraded or non-functional tool actions with this model.");
+            console.warn("   Recommended agentic models: bb/agentic-coding, google-ai-studio/gemini-3.8-flash, anthropic/claude-sonnet-5.\n");
+          }
+        } else {
+          console.warn(`\n⚠️  Notice: Model "${modelId}" was not found in the Cruise catalogue for this key.`);
+          console.warn("   Updating settings anyway. Ensure the model ID is correct.\n");
+        }
+      }
+    } catch {
+      // Network timeout or offline - proceed without catalogue check
+    }
+  }
+
+  const previousModel = settings.env.ANTHROPIC_MODEL;
+  settings.env.ANTHROPIC_MODEL = modelId;
+
+  fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + "\n", "utf8");
+
+  console.log(`✓ Active model switched to "${modelId}".`);
+  if (previousModel && previousModel !== modelId) {
+    console.log(`  Previous model: ${previousModel}`);
+  }
+  console.log(`  Config file:    ${settingsPath}`);
+  console.log("Remember to restart Claude Code for changes to take effect.");
+
+  if (!settings.env.ANTHROPIC_BASE_URL) {
+    console.log("\nℹ Notice: Cruise gateway is not enabled yet in settings.json.");
+    console.log('  Run "npx @bytesbrains/claude-code-cruise enable" to route requests through Cruise.');
+  }
+
+  return true;
+}
+
 function printHelp() {
   console.log(`BytesBrains Cruise for Claude Code — CLI Bootstrapper
 
@@ -418,17 +503,19 @@ Usage:
   npx @bytesbrains/claude-code-cruise <command> [options]
 
 Commands:
-  enable     Route Claude Code through Cruise LLM gateway and set up status line
-  disable    Safely remove Cruise gateway configuration from settings.json
-  status     Inspect current Claude Code Cruise gateway configuration
+  enable                 Route Claude Code through Cruise LLM gateway and set up status line
+  disable                Safely remove Cruise gateway configuration from settings.json
+  status                 Inspect current Claude Code Cruise gateway configuration
+  switch <model-or-lane> Switch active model or lane in settings.json
 
 Options:
   -s, --session-id <id>  Set custom session affinity ID (1–128 chars: letters, digits, ._:-)
+  --skip-check           Skip model catalogue verification when switching models
   -h, --help             Show this help message
   -v, --version          Show version number`);
 }
 
-function run(args = process.argv.slice(2)) {
+async function run(args = process.argv.slice(2)) {
   const command = args[0];
 
   if (!command || command === "-h" || command === "--help" || command === "help") {
@@ -471,14 +558,30 @@ function run(args = process.argv.slice(2)) {
     return 0;
   }
 
+  if (command === "switch") {
+    const targetModel = args[1];
+    let skipCheck = false;
+    for (let i = 2; i < args.length; i++) {
+      if (args[i] === "--skip-check") {
+        skipCheck = true;
+      }
+    }
+    const success = await switchModel(targetModel, { skipCheck });
+    return success ? 0 : 1;
+  }
+
   console.error(`Unknown command: ${command}`);
   console.error('Run "npx @bytesbrains/claude-code-cruise --help" for available commands.');
   return 1;
 }
 
 if (require.main === module) {
-  const exitCode = run();
-  process.exit(exitCode);
+  Promise.resolve(run()).then((exitCode) => {
+    process.exit(typeof exitCode === "number" ? exitCode : 0);
+  }).catch((err) => {
+    console.error(err);
+    process.exit(1);
+  });
 }
 
 module.exports = {
@@ -486,6 +589,7 @@ module.exports = {
   enable,
   disable,
   status,
+  switchModel,
   validateKey,
   validateSessionId,
   mergeCustomHeaders,

@@ -17,10 +17,17 @@ Target model or lane requested by user: `$ARGUMENTS`
    - **If `$ARGUMENTS` is provided**:
      - Check whether the requested value matches a valid lane ID (e.g. `bb/agentic-coding`, `bb/chat-assistant`, `bb/code-review`) or pinned model ID (e.g. `anthropic/claude-sonnet-5`, `deepseek/deepseek-flash`) in the catalogue.
      - If the model or lane is **not found**: do NOT update settings. Inform the user that the model or lane is not recognized or not reachable for this key, display the available lanes and popular models, and ask them to select a valid ID.
+     - **Check tool capability**: Check `x-cruise.tools` for the model. If `tools: false` (e.g. `openai/gpt-5.6-luna`), warn the user prominently:
+       > ⚠️ **Warning**: This model does not support tool calling in Cruise (`tools: false`). Claude Code requires tool calling to read/write files and execute bash commands. If you switch to this model, Claude Code commands and tools will not function. Recommended models with tool support: `bb/agentic-coding`, `google-ai-studio/gemini-3.8-flash`, `anthropic/claude-sonnet-5`.
+       Ask the user to confirm before applying a model with `tools: false`.
      - If it is valid: proceed to step 2 with the verified ID.
    - **If `$ARGUMENTS` is empty**:
-     - Present the list of available lanes and popular models from `list_models`.
+     - Present the list of available lanes and popular models from `list_models`. Highlight lanes that have tool calling enabled (`tools: true`).
      - Prompt the user to choose which lane or model they want to switch to before proceeding.
+
+> [!TIP]
+> If your current model lacks tool capability or fails to execute slash commands, you can switch models directly from your terminal without using Claude Code:
+> `npx @bytesbrains/claude-code-cruise switch <model-or-lane>`
 
 ## 2. Update `~/.claude/settings.json`
 

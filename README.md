@@ -56,6 +56,9 @@ When a Claude subscription is expired or quota is exhausted, Claude Code fails b
 # Enable Cruise gateway routing & status line
 npx @bytesbrains/claude-code-cruise enable
 
+# Switch active model or lane
+npx @bytesbrains/claude-code-cruise switch bb/agentic-coding
+
 # Check current gateway status
 npx @bytesbrains/claude-code-cruise status
 
@@ -67,7 +70,7 @@ npx @bytesbrains/claude-code-cruise disable
 
 | | |
 |---|---|
-| **CLI `claude-code-cruise`** | Standalone bootstrapper (`npx @bytesbrains/claude-code-cruise enable/disable`) for offline setup when Claude Code cannot start |
+| **CLI `claude-code-cruise`** | Standalone bootstrapper (`npx @bytesbrains/claude-code-cruise enable/disable/switch`) for offline setup when Claude Code cannot start |
 | **MCP server `cruise`** | Three read-only tools about your key's own project: `list_models` (models and lanes you can reach, with prices), `get_budget` (what is left, and whether the next request is served), `get_spend` (a month's charges by model or lane). Reads `CRUISE_API_KEY` and `CRUISE_BASE_URL` from the environment |
 | **Command `/cruise:connect`** | Route Claude Code through Cruise and install the spend status line in one step |
 | **Command `/cruise:disconnect`** | Disconnect from Cruise gateway and restore standard Anthropic routing |

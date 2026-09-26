@@ -8,8 +8,10 @@ disable-model-invocation: true
 Revert Claude Code back to direct Anthropic API / subscription routing by removing Cruise gateway settings.
 
 ## 1. Inspect `~/.claude/settings.json`
+ 
+If `--local` is specified, inspect and revert `./.claude/settings.json` in the current repository instead of `~/.claude/settings.json`.
 
-Read `~/.claude/settings.json`.
+Read `~/.claude/settings.json` (or `./.claude/settings.json` if `--local`).
 Check if `~/.claude/settings.json` exists and whether it contains Cruise gateway settings (e.g. `ANTHROPIC_BASE_URL` containing `bytesbrains` or matching Cruise, or `apiKeyHelper` referencing `CRUISE_API_KEY`).
 
 - If `~/.claude/settings.json` is missing or contains no Cruise gateway configuration:

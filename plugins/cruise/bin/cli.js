@@ -9,6 +9,7 @@ const fs = require("node:fs");
 const path = require("node:path");
 const os = require("node:os");
 const crypto = require("node:crypto");
+const { spawn } = require("node:child_process");
 
 const KNOWN_PREFIXES = ["cru_live_", "cru_test_", "cru_demo_", "cru_svc_"];
 const SESSION_ID_REGEX = /^[A-Za-z0-9._:-]{1,128}$/;
@@ -101,12 +102,22 @@ function cleanCustomHeaders(existingHeaders) {
 }
 
 
-function getClaudeConfigDir() {
+function getClaudeConfigDir(options = {}) {
+  if (options.local) {
+    const baseDir = options.cwd || process.cwd();
+    return path.join(baseDir, ".claude");
+  }
   return process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), ".claude");
 }
 
-function getSettingsPath() {
-  return process.env.CLAUDE_SETTINGS_PATH || path.join(getClaudeConfigDir(), "settings.json");
+function getSettingsPath(options = {}) {
+  if (options.settingsPath) {
+    return options.settingsPath;
+  }
+  if (options.local) {
+    return path.join(getClaudeConfigDir(options), "settings.json");
+  }
+  return process.env.CLAUDE_SETTINGS_PATH || path.join(getClaudeConfigDir(options), "settings.json");
 }
 
 function getPackageVersion() {
@@ -175,7 +186,116 @@ function installStatusLine(claudeDir) {
   return false;
 }
 
+function getCruiseEnv(options = {}) {
+  const apiKey = process.env.CRUISE_API_KEY;
+  const envBaseUrl = process.env.CRUISE_BASE_URL || options.baseUrl;
+
+  const keyCheck = validateKey(apiKey, envBaseUrl);
+  if (!keyCheck.valid) {
+    return { valid: false, error: keyCheck.error };
+  }
+
+  const requestedSessionId =
+    options.sessionId !== undefined ? options.sessionId : process.env.CRUISE_SESSION_ID;
+  if (requestedSessionId !== undefined) {
+    const sessionCheck = validateSessionId(requestedSessionId);
+    if (!sessionCheck.valid) {
+      return { valid: false, error: sessionCheck.error };
+    }
+  }
+
+  const baseUrl = detectBaseUrl(apiKey, envBaseUrl);
+
+  const env = {
+    ...process.env,
+    ANTHROPIC_BASE_URL: baseUrl,
+    ANTHROPIC_MODEL: process.env.ANTHROPIC_MODEL || options.model || "bb/agentic-coding",
+    ANTHROPIC_DEFAULT_HAIKU_MODEL: process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL || "bb/chat-assistant",
+    CLAUDE_CODE_ATTRIBUTION_HEADER: "0",
+    CLAUDE_CODE_AUTO_MODE_SERVER: "0",
+    ANTHROPIC_CUSTOM_HEADERS: mergeCustomHeaders(
+      process.env.ANTHROPIC_CUSTOM_HEADERS,
+      requestedSessionId
+    ),
+    ANTHROPIC_AUTH_TOKEN: apiKey,
+    ANTHROPIC_API_KEY: apiKey,
+  };
+
+  return { valid: true, env, baseUrl, model: env.ANTHROPIC_MODEL };
+}
+
+function runClaude(args = [], options = {}) {
+  const childArgs = [];
+  let sessionId = options.sessionId;
+  for (let i = 0; i < args.length; i++) {
+    const arg = args[i];
+    if (arg === "--session-id") {
+      if (i + 1 < args.length) {
+        sessionId = args[++i];
+      }
+    } else if (arg.startsWith("--session-id=")) {
+      sessionId = arg.slice("--session-id=".length);
+    } else {
+      childArgs.push(arg);
+    }
+  }
+
+  const cruiseResult = getCruiseEnv({ sessionId, baseUrl: options.baseUrl, model: options.model });
+  if (!cruiseResult.valid) {
+    console.error(`Error: ${cruiseResult.error}`);
+    console.error('Export your key first (e.g. export CRUISE_API_KEY="cru_...") and rerun this command.');
+    return Promise.resolve(1);
+  }
+
+  const claudeBin = options.claudeBin || process.env.CLAUDE_BIN || (process.platform === "win32" ? "claude.cmd" : "claude");
+
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (code) => {
+      if (!settled) {
+        settled = true;
+        resolve(code);
+      }
+    };
+
+    let child;
+    try {
+      child = spawn(claudeBin, childArgs, {
+        stdio: options.stdio || "inherit",
+        env: cruiseResult.env,
+        shell: process.platform === "win32",
+      });
+    } catch (err) {
+      console.error(`Error spawning Claude Code: ${err.message}`);
+      return finish(1);
+    }
+
+    child.on("error", (err) => {
+      if (err.code === "ENOENT") {
+        console.error(`Error: Claude Code CLI ('${claudeBin}') not found in PATH.`);
+        console.error("Install Claude Code first: npm install -g @anthropic-ai/claude-code");
+      } else {
+        console.error(`Error spawning Claude Code: ${err.message}`);
+      }
+      finish(1);
+    });
+
+    child.on("exit", (code, signal) => {
+      if (signal) {
+        try {
+          process.kill(process.pid, signal);
+        } catch {
+          finish(1);
+        }
+      } else {
+        finish(code ?? 0);
+      }
+    });
+  });
+}
+
 function enable(options = {}) {
+  const isLocal = Boolean(options.local);
   const apiKey = process.env.CRUISE_API_KEY;
   const envBaseUrl = process.env.CRUISE_BASE_URL || options.baseUrl;
 
@@ -197,8 +317,8 @@ function enable(options = {}) {
   }
 
   const baseUrl = detectBaseUrl(apiKey, envBaseUrl);
-  const claudeDir = getClaudeConfigDir();
-  const settingsPath = getSettingsPath();
+  const claudeDir = getClaudeConfigDir(options);
+  const settingsPath = getSettingsPath(options);
 
   fs.mkdirSync(claudeDir, { recursive: true });
 
@@ -235,8 +355,10 @@ function enable(options = {}) {
 
   settings.apiKeyHelper = DEFAULT_API_KEY_HELPER;
 
-  const isDefaultClaudeDir = claudeDir === path.join(os.homedir(), ".claude");
-  const statusLineCommand = isDefaultClaudeDir
+  const isDefaultClaudeDir = !isLocal && claudeDir === path.join(os.homedir(), ".claude");
+  const statusLineCommand = isLocal
+    ? "./.claude/cruise-statusline.sh"
+    : isDefaultClaudeDir
     ? "~/.claude/cruise-statusline.sh"
     : path.join(claudeDir, "cruise-statusline.sh");
 
@@ -249,7 +371,8 @@ function enable(options = {}) {
 
   fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + "\n", "utf8");
 
-  console.log("✓ BytesBrains Cruise gateway enabled for Claude Code.");
+  const scopeMsg = isLocal ? " (project-level)" : "";
+  console.log(`✓ BytesBrains Cruise gateway enabled for Claude Code${scopeMsg}.`);
   console.log(`  Base URL:     ${baseUrl}`);
   console.log(`  Model:        ${settings.env.ANTHROPIC_MODEL}`);
   console.log(`  Haiku Model:  ${settings.env.ANTHROPIC_DEFAULT_HAIKU_MODEL}`);
@@ -261,12 +384,16 @@ function enable(options = {}) {
     console.log(`  Status Line:  ${statusLineCommand}`);
   }
   console.log(`  Config File:  ${settingsPath}`);
-  console.log("\nRestart Claude Code to begin routing model requests through Cruise.");
+  const restartMsg = isLocal
+    ? "Restart Claude Code in this project to begin routing model requests through Cruise."
+    : "Restart Claude Code to begin routing model requests through Cruise.";
+  console.log(`\n${restartMsg}`);
   return true;
 }
 
-function disable() {
-  const settingsPath = getSettingsPath();
+function disable(options = {}) {
+  const isLocal = Boolean(options.local);
+  const settingsPath = getSettingsPath(options);
 
   if (!fs.existsSync(settingsPath)) {
     console.log("Cruise routing is not active (settings file does not exist).");
@@ -375,18 +502,24 @@ function disable() {
 
   fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + "\n", "utf8");
 
-  console.log("✓ BytesBrains Cruise gateway disabled for Claude Code.");
+  const scopeMsg = isLocal ? " (project-level)" : "";
+  console.log(`✓ BytesBrains Cruise gateway disabled for Claude Code${scopeMsg}.`);
   console.log(`  Removed:      ${removed.join(", ")}`);
   console.log(`  Config File:  ${settingsPath}`);
-  console.log("\nRestart Claude Code to return to standard Anthropic routing.");
+  const restartMsg = isLocal
+    ? "Restart Claude Code in this project to return to standard Anthropic routing."
+    : "Restart Claude Code to return to standard Anthropic routing.";
+  console.log(`\n${restartMsg}`);
   return true;
 }
 
-function status() {
-  const settingsPath = getSettingsPath();
+function status(options = {}) {
+  const isLocal = Boolean(options.local);
+  const settingsPath = getSettingsPath(options);
+  const scopeSuffix = isLocal ? " (project-level)" : "";
 
   if (!fs.existsSync(settingsPath)) {
-    console.log("Cruise LLM gateway: Disabled (no settings file found)");
+    console.log(`Cruise LLM gateway${scopeSuffix}: Disabled (no settings file found)`);
     return;
   }
 
@@ -394,7 +527,7 @@ function status() {
   try {
     settings = JSON.parse(fs.readFileSync(settingsPath, "utf8"));
   } catch {
-    console.log("Cruise LLM gateway: Unknown (settings file could not be parsed)");
+    console.log(`Cruise LLM gateway${scopeSuffix}: Unknown (settings file could not be parsed)`);
     return;
   }
 
@@ -405,7 +538,7 @@ function status() {
   );
 
   if (!isConfigured) {
-    console.log("Cruise LLM gateway: Disabled (standard Anthropic routing)");
+    console.log(`Cruise LLM gateway${scopeSuffix}: Disabled (standard Anthropic routing)`);
     return;
   }
 
@@ -418,7 +551,7 @@ function status() {
     }
   }
 
-  console.log("Cruise LLM gateway: Enabled");
+  console.log(`Cruise LLM gateway${scopeSuffix}: Enabled`);
   console.log(`  Base URL:     ${settings.env?.ANTHROPIC_BASE_URL || "(not set)"}`);
   console.log(`  Model:        ${settings.env?.ANTHROPIC_MODEL || "(default)"}`);
   console.log(`  Haiku Model:  ${settings.env?.ANTHROPIC_DEFAULT_HAIKU_MODEL || "(default)"}`);
@@ -434,18 +567,19 @@ function status() {
 }
 
 async function switchModel(targetModel, options = {}) {
+  const isLocal = Boolean(options.local);
   if (!targetModel || typeof targetModel !== "string" || !targetModel.trim()) {
     console.error("Error: Model or lane ID is required.");
-    console.error("Usage: npx @bytesbrains/claude-code-cruise switch <model-or-lane>");
+    console.error("Usage: npx @bytesbrains/claude-code-cruise switch <model-or-lane> [--local]");
     console.error("Examples:");
     console.error("  npx @bytesbrains/claude-code-cruise switch bb/agentic-coding");
-    console.error("  npx @bytesbrains/claude-code-cruise switch google-ai-studio/gemini-3.8-flash");
+    console.error("  npx @bytesbrains/claude-code-cruise switch google-ai-studio/gemini-3.8-flash --local");
     return false;
   }
 
   const modelId = targetModel.trim();
-  const settingsPath = getSettingsPath();
-  const claudeDir = getClaudeConfigDir();
+  const settingsPath = getSettingsPath(options);
+  const claudeDir = getClaudeConfigDir(options);
 
   let settings = {};
   if (fs.existsSync(settingsPath)) {
@@ -505,7 +639,8 @@ async function switchModel(targetModel, options = {}) {
 
   fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + "\n", "utf8");
 
-  console.log(`✓ Active model switched to "${modelId}".`);
+  const scopeMsg = isLocal ? " (project-level)" : "";
+  console.log(`✓ Active model switched to "${modelId}"${scopeMsg}.`);
   if (previousModel && previousModel !== modelId) {
     console.log(`  Previous model: ${previousModel}`);
   }
@@ -514,7 +649,10 @@ async function switchModel(targetModel, options = {}) {
 
   if (!settings.env.ANTHROPIC_BASE_URL) {
     console.log("\nℹ Notice: Cruise gateway is not enabled yet in settings.json.");
-    console.log('  Run "npx @bytesbrains/claude-code-cruise enable" to route requests through Cruise.');
+    const enableCmd = isLocal
+      ? '  Run "npx @bytesbrains/claude-code-cruise enable --local" to route requests through Cruise.'
+      : '  Run "npx @bytesbrains/claude-code-cruise enable" to route requests through Cruise.';
+    console.log(enableCmd);
   }
 
   return true;
@@ -529,14 +667,17 @@ CLI configures Cruise LLM gateway routing offline.
 
 Usage:
   npx @bytesbrains/claude-code-cruise <command> [options]
+  claude-cruise [args...]
 
 Commands:
+  run [args...]          Launch Claude Code child process with Cruise gateway environment
   enable                 Route Claude Code through Cruise LLM gateway and set up status line
   disable                Safely remove Cruise gateway configuration from settings.json
   status                 Inspect current Claude Code Cruise gateway configuration
   switch <model-or-lane> Switch active model or lane in settings.json
 
 Options:
+  -l, --local            Apply configuration to local project (./.claude/settings.json)
   -s, --session-id <id>  Set custom session affinity ID (1–128 chars: letters, digits, ._:-)
   --skip-check           Skip model catalogue verification when switching models
   -h, --help             Show this help message
@@ -544,7 +685,15 @@ Options:
 }
 
 async function run(args = process.argv.slice(2)) {
+  const invokedAs = path.basename(process.argv[1] || "", path.extname(process.argv[1] || ""));
+  const isClaudeCruiseAlias = invokedAs === "claude-cruise";
+
   const command = args[0];
+
+  if (isClaudeCruiseAlias && command !== "enable" && command !== "disable" && command !== "status" && command !== "switch") {
+    const childArgs = command === "run" ? args.slice(1) : args;
+    return await runClaude(childArgs);
+  }
 
   if (!command || command === "-h" || command === "--help" || command === "help") {
     printHelp();
@@ -556,11 +705,18 @@ async function run(args = process.argv.slice(2)) {
     return 0;
   }
 
+  if (command === "run") {
+    return await runClaude(args.slice(1));
+  }
+
   if (command === "enable") {
     let sessionId;
+    let local = false;
     for (let i = 1; i < args.length; i++) {
       const arg = args[i];
-      if (arg === "--session-id" || arg === "-s") {
+      if (arg === "--local" || arg === "-l") {
+        local = true;
+      } else if (arg === "--session-id" || arg === "-s") {
         if (i + 1 >= args.length) {
           console.error("Error: Option '--session-id' requires an argument.");
           return 1;
@@ -572,29 +728,49 @@ async function run(args = process.argv.slice(2)) {
         sessionId = arg.slice("-s=".length);
       }
     }
-    const success = enable({ sessionId });
+    const success = enable({ sessionId, local });
     return success ? 0 : 1;
   }
 
   if (command === "disable") {
-    const success = disable();
+    let local = false;
+    for (let i = 1; i < args.length; i++) {
+      const arg = args[i];
+      if (arg === "--local" || arg === "-l") {
+        local = true;
+      }
+    }
+    const success = disable({ local });
     return success ? 0 : 1;
   }
 
   if (command === "status") {
-    status();
+    let local = false;
+    for (let i = 1; i < args.length; i++) {
+      const arg = args[i];
+      if (arg === "--local" || arg === "-l") {
+        local = true;
+      }
+    }
+    status({ local });
     return 0;
   }
 
   if (command === "switch") {
-    const targetModel = args[1];
+    let targetModel;
     let skipCheck = false;
-    for (let i = 2; i < args.length; i++) {
-      if (args[i] === "--skip-check") {
+    let local = false;
+    for (let i = 1; i < args.length; i++) {
+      const arg = args[i];
+      if (arg === "--local" || arg === "-l") {
+        local = true;
+      } else if (arg === "--skip-check") {
         skipCheck = true;
+      } else if (!targetModel && !arg.startsWith("-")) {
+        targetModel = arg;
       }
     }
-    const success = await switchModel(targetModel, { skipCheck });
+    const success = await switchModel(targetModel, { skipCheck, local });
     return success ? 0 : 1;
   }
 
@@ -618,6 +794,8 @@ module.exports = {
   disable,
   status,
   switchModel,
+  runClaude,
+  getCruiseEnv,
   migrateSettings,
   validateKey,
   validateSessionId,

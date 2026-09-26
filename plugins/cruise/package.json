@@ -15,7 +15,8 @@
   },
   "bin": {
     "claude-code-cruise": "bin/cli.js",
-    "cruise": "bin/cli.js"
+    "cruise": "bin/cli.js",
+    "claude-cruise": "bin/cli.js"
   },
   "keywords": ["claude-code", "claude-code-plugin", "cruise", "llm-gateway", "budgets", "mcp", "bytesbrains"],
   "files": [".claude-plugin/", ".mcp.json", "skills/", "commands/", "scripts/", "bin/", "NOTICE"],

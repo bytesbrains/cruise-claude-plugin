@@ -53,10 +53,18 @@ for example an internal one that pins versions or mirrors a registry. Point an e
 When a Claude subscription is expired or quota is exhausted, or when Claude Code is locked out by an authentication helper failure because `CRUISE_API_KEY` was not exported in a new terminal, Claude Code fails before it can execute any prompt or slash command. To resolve this offline:
 
 ```sh
-# Enable Cruise gateway routing & status line
+# Run Claude on-demand through Cruise without touching global settings
+npx @bytesbrains/claude-code-cruise run [args...]
+# or binary alias:
+claude-cruise [args...]
+
+# Enable Cruise gateway routing & status line globally
 npx @bytesbrains/claude-code-cruise enable
 
-# Switch active model or lane
+# Or configure Cruise for the current repository only (./.claude/settings.json)
+npx @bytesbrains/claude-code-cruise enable --local
+
+# Switch active model or lane (globally or locally with --local)
 npx @bytesbrains/claude-code-cruise switch bb/agentic-coding
 
 # Check current gateway status and auto-upgrade legacy settings
@@ -70,7 +78,7 @@ npx @bytesbrains/claude-code-cruise disable
 
 | | |
 |---|---|
-| **CLI `claude-code-cruise`** | Standalone bootstrapper (`npx @bytesbrains/claude-code-cruise enable/disable/switch`) for offline setup when Claude Code cannot start |
+| **CLI `claude-code-cruise` / `claude-cruise`** | Standalone bootstrapper and on-demand launcher (`claude-cruise`, `run`, `enable`, `disable`, `switch`) with global and project-level (`--local`) scope |
 | **MCP server `cruise`** | Three read-only tools about your key's own project: `list_models` (models and lanes you can reach, with prices), `get_budget` (what is left, and whether the next request is served), `get_spend` (a month's charges by model or lane). Reads `CRUISE_API_KEY` and `CRUISE_BASE_URL` from the environment |
 | **Command `/cruise:connect`** | Route Claude Code through Cruise and install the spend status line in one step |
 | **Command `/cruise:disconnect`** | Disconnect from Cruise gateway and restore standard Anthropic routing |

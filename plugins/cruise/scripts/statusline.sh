@@ -10,7 +10,7 @@
 # it never appears in the process list. Nothing is written but the cache,
 # which holds the displayed line, never the key.
 
-cat >/dev/null 2>&1 # Claude Code's session JSON; this line does not need it.
+cat >/dev/null 2>&1 # Claude Code session JSON (with session_id); this status line displays spend only; gateway session affinity is managed via ANTHROPIC_CUSTOM_HEADERS (x-cruise-session).
 
 if [ -z "${CRUISE_API_KEY:-}" ]; then
   printf 'Cruise: set CRUISE_API_KEY\n'

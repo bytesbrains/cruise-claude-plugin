@@ -8,8 +8,75 @@
 const fs = require("node:fs");
 const path = require("node:path");
 const os = require("node:os");
+const crypto = require("node:crypto");
 
 const KNOWN_PREFIXES = ["cru_live_", "cru_test_", "cru_demo_", "cru_svc_"];
+const SESSION_ID_REGEX = /^[A-Za-z0-9._:-]{1,128}$/;
+
+function validateSessionId(sessionId) {
+  if (!sessionId || typeof sessionId !== "string" || !SESSION_ID_REGEX.test(sessionId)) {
+    return {
+      valid: false,
+      error: "Cruise session ID must be 1–128 characters consisting of letters, digits, and ._:-",
+    };
+  }
+  return { valid: true };
+}
+
+function mergeCustomHeaders(existingHeaders, sessionOverride) {
+  const lines = typeof existingHeaders === "string" ? existingHeaders.split("\n").filter(Boolean) : [];
+  let hasClass = false;
+  let hasSession = false;
+  const result = [];
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (/^x-cruise-class\s*:/i.test(trimmed)) {
+      result.push("x-cruise-class: agentic");
+      hasClass = true;
+    } else if (/^x-cruise-session\s*:/i.test(trimmed)) {
+      const sid = sessionOverride || trimmed.replace(/^x-cruise-session\s*:\s*/i, "").trim();
+      result.push(`x-cruise-session: ${sid}`);
+      hasSession = true;
+    } else {
+      result.push(line);
+    }
+  }
+
+  if (!hasClass) {
+    result.push("x-cruise-class: agentic");
+  }
+  if (!hasSession) {
+    const sid = sessionOverride || `claude-code-${crypto.randomUUID()}`;
+    result.push(`x-cruise-session: ${sid}`);
+  }
+
+  return result.join("\n");
+}
+
+function cleanCustomHeaders(existingHeaders) {
+  if (typeof existingHeaders !== "string") {
+    return { cleaned: undefined, removedCruiseHeaders: false };
+  }
+  const lines = existingHeaders.split("\n").filter(Boolean);
+  const remaining = [];
+  let removedCruiseHeaders = false;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (/^x-cruise-(class|session)\s*:/i.test(trimmed)) {
+      removedCruiseHeaders = true;
+    } else {
+      remaining.push(line);
+    }
+  }
+
+  return {
+    cleaned: remaining.length > 0 ? remaining.join("\n") : undefined,
+    removedCruiseHeaders,
+  };
+}
+
 
 function getClaudeConfigDir() {
   return process.env.CLAUDE_CONFIG_DIR || path.join(os.homedir(), ".claude");
@@ -96,6 +163,15 @@ function enable(options = {}) {
     return false;
   }
 
+  const requestedSessionId = options.sessionId || process.env.CRUISE_SESSION_ID;
+  if (requestedSessionId) {
+    const sessionCheck = validateSessionId(requestedSessionId);
+    if (!sessionCheck.valid) {
+      console.error(`Error: ${sessionCheck.error}`);
+      return false;
+    }
+  }
+
   const baseUrl = detectBaseUrl(apiKey, envBaseUrl);
   const claudeDir = getClaudeConfigDir();
   const settingsPath = getSettingsPath();
@@ -127,6 +203,10 @@ function enable(options = {}) {
   }
   settings.env.ANTHROPIC_DEFAULT_HAIKU_MODEL = "bb/chat-assistant";
   settings.env.CLAUDE_CODE_ATTRIBUTION_HEADER = "0";
+  settings.env.ANTHROPIC_CUSTOM_HEADERS = mergeCustomHeaders(
+    settings.env.ANTHROPIC_CUSTOM_HEADERS,
+    requestedSessionId
+  );
 
   settings.apiKeyHelper = 'printf %s "$CRUISE_API_KEY"';
 
@@ -148,6 +228,10 @@ function enable(options = {}) {
   console.log(`  Base URL:     ${baseUrl}`);
   console.log(`  Model:        ${settings.env.ANTHROPIC_MODEL}`);
   console.log(`  Haiku Model:  ${settings.env.ANTHROPIC_DEFAULT_HAIKU_MODEL}`);
+  if (settings.env.ANTHROPIC_CUSTOM_HEADERS) {
+    const formattedHeaders = settings.env.ANTHROPIC_CUSTOM_HEADERS.replace(/\n/g, ", ");
+    console.log(`  Headers:      ${formattedHeaders}`);
+  }
   if (statusLineInstalled) {
     console.log(`  Status Line:  ${statusLineCommand}`);
   }
@@ -181,7 +265,8 @@ function disable() {
     (settings.env && (
       (settings.env.ANTHROPIC_BASE_URL && (settings.env.ANTHROPIC_BASE_URL.includes("bytesbrains") || settings.env.ANTHROPIC_BASE_URL.includes("cruise"))) ||
       settings.env.ANTHROPIC_DEFAULT_HAIKU_MODEL === "bb/chat-assistant" ||
-      (settings.env.ANTHROPIC_MODEL && (settings.env.ANTHROPIC_MODEL.startsWith("bb/") || settings.env.ANTHROPIC_MODEL.includes("cruise")))
+      (settings.env.ANTHROPIC_MODEL && (settings.env.ANTHROPIC_MODEL.startsWith("bb/") || settings.env.ANTHROPIC_MODEL.includes("cruise"))) ||
+      (settings.env.ANTHROPIC_CUSTOM_HEADERS && settings.env.ANTHROPIC_CUSTOM_HEADERS.includes("x-cruise-"))
     ))
   );
 
@@ -217,6 +302,19 @@ function disable() {
       delete settings.env.CLAUDE_CODE_ATTRIBUTION_HEADER;
       removed.push("env.CLAUDE_CODE_ATTRIBUTION_HEADER");
       modified = true;
+    }
+    if (settings.env.ANTHROPIC_CUSTOM_HEADERS) {
+      const { cleaned, removedCruiseHeaders } = cleanCustomHeaders(settings.env.ANTHROPIC_CUSTOM_HEADERS);
+      if (removedCruiseHeaders) {
+        if (cleaned) {
+          settings.env.ANTHROPIC_CUSTOM_HEADERS = cleaned;
+          removed.push("env.ANTHROPIC_CUSTOM_HEADERS (Cruise headers removed)");
+        } else {
+          delete settings.env.ANTHROPIC_CUSTOM_HEADERS;
+          removed.push("env.ANTHROPIC_CUSTOM_HEADERS");
+        }
+        modified = true;
+      }
     }
     if (Object.keys(settings.env).length === 0) {
       delete settings.env;
@@ -271,7 +369,8 @@ function status() {
 
   const isConfigured = Boolean(
     (settings.env?.ANTHROPIC_BASE_URL && (settings.env.ANTHROPIC_BASE_URL.includes("bytesbrains") || settings.env.ANTHROPIC_BASE_URL.includes("cruise"))) ||
-    (settings.apiKeyHelper && settings.apiKeyHelper.includes("CRUISE_API_KEY"))
+    (settings.apiKeyHelper && settings.apiKeyHelper.includes("CRUISE_API_KEY")) ||
+    (settings.env?.ANTHROPIC_CUSTOM_HEADERS && settings.env.ANTHROPIC_CUSTOM_HEADERS.includes("x-cruise-"))
   );
 
   if (!isConfigured) {
@@ -283,6 +382,10 @@ function status() {
   console.log(`  Base URL:     ${settings.env?.ANTHROPIC_BASE_URL || "(not set)"}`);
   console.log(`  Model:        ${settings.env?.ANTHROPIC_MODEL || "(default)"}`);
   console.log(`  Haiku Model:  ${settings.env?.ANTHROPIC_DEFAULT_HAIKU_MODEL || "(default)"}`);
+  if (settings.env?.ANTHROPIC_CUSTOM_HEADERS) {
+    const formattedHeaders = settings.env.ANTHROPIC_CUSTOM_HEADERS.replace(/\n/g, ", ");
+    console.log(`  Headers:      ${formattedHeaders}`);
+  }
   console.log(`  Status Line:  ${settings.statusLine?.command || "(not set)"}`);
   console.log(`  Config File:  ${settingsPath}`);
 }
@@ -302,8 +405,9 @@ Commands:
   status     Inspect current Claude Code Cruise gateway configuration
 
 Options:
-  -h, --help     Show this help message
-  -v, --version  Show version number`);
+  -s, --session-id <id>  Set custom session affinity ID (1–128 chars: letters, digits, ._:-)
+  -h, --help             Show this help message
+  -v, --version          Show version number`);
 }
 
 function run(args = process.argv.slice(2)) {
@@ -320,7 +424,19 @@ function run(args = process.argv.slice(2)) {
   }
 
   if (command === "enable") {
-    const success = enable();
+    let sessionId;
+    for (let i = 1; i < args.length; i++) {
+      const arg = args[i];
+      if (arg === "--session-id" || arg === "-s") {
+        sessionId = args[i + 1];
+        i++;
+      } else if (arg.startsWith("--session-id=")) {
+        sessionId = arg.slice("--session-id=".length);
+      } else if (arg.startsWith("-s=")) {
+        sessionId = arg.slice("-s=".length);
+      }
+    }
+    const success = enable({ sessionId });
     return success ? 0 : 1;
   }
 
@@ -350,9 +466,13 @@ module.exports = {
   disable,
   status,
   validateKey,
+  validateSessionId,
+  mergeCustomHeaders,
+  cleanCustomHeaders,
   detectBaseUrl,
   installStatusLine,
   getClaudeConfigDir,
   getSettingsPath,
   KNOWN_PREFIXES,
+  SESSION_ID_REGEX,
 };

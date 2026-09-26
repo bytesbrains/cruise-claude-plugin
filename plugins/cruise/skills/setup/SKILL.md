@@ -54,8 +54,7 @@ Explain what this changes before asking:
   non-Claude model; Anthropic does not support non-Claude models behind a gateway, so a pinned
   Claude model (for example `anthropic/claude-sonnet-5`, if `list_models` shows it) is the choice
   for Claude itself.
-- In this version of Cruise, Claude's extended-thinking blocks and Anthropic prompt caching do
-  not pass through, and Claude Code turns off on-demand tool search behind any gateway.
+- In this version of Cruise, Claude's extended-thinking blocks do not pass through, and Claude Code turns off on-demand tool search behind any gateway. Multi-turn prompt caching on lane requests is preserved via Cruise gateway session affinity (`x-cruise-session`).
 
 If the user agrees, read `~/.claude/settings.json` (create it if absent), **merge** — never
 overwrite other keys — and show the diff before writing:
@@ -66,7 +65,8 @@ overwrite other keys — and show the diff before writing:
     "ANTHROPIC_BASE_URL": "https://cruise.bytesbrains.net",
     "ANTHROPIC_MODEL": "bb/agentic-coding",
     "ANTHROPIC_DEFAULT_HAIKU_MODEL": "bb/chat-assistant",
-    "CLAUDE_CODE_ATTRIBUTION_HEADER": "0"
+    "CLAUDE_CODE_ATTRIBUTION_HEADER": "0",
+    "ANTHROPIC_CUSTOM_HEADERS": "x-cruise-class: agentic\nx-cruise-session: claude-code-<uuid>"
   },
   "apiKeyHelper": "printf %s \"$CRUISE_API_KEY\""
 }
@@ -76,6 +76,9 @@ Use the user's `CRUISE_BASE_URL` instead if it is set, and the model they choose
 `ANTHROPIC_MODEL`. `CLAUDE_CODE_ATTRIBUTION_HEADER=0` keeps Claude Code from prepending its
 billing attribution block: Cruise flattens `system` to one string for every upstream, so the
 block would otherwise reach the model as prompt text ([gateway protocol](https://code.claude.com/docs/en/llm-gateway-protocol.md#system-prompt-attribution-block)).
+`ANTHROPIC_CUSTOM_HEADERS` passes `x-cruise-class: agentic` to classify requests in the
+Cruise ledger, and `x-cruise-session: claude-code-<uuid>` to pin member model selection across
+turns on lanes like `bb/agentic-coding`, maintaining upstream prompt caching.
 The helper reads the key from the environment at run time, so the key itself never enters the
 settings file; Claude Code sends the helper's output in both headers Cruise accepts. Then tell
 them to restart Claude Code and run `/status`: the base URL should be Cruise's and the

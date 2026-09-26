@@ -121,9 +121,14 @@ To stop routing Claude Code through Cruise, remove the keys `/cruise:setup` adde
   is configured, and bills the Cruise key instead.
 - **Lanes may be served by non-Claude models**, which Anthropic does not support behind a gateway.
   Pin a Claude model if you want Claude.
-- Cruise currently translates Anthropic's format rather than passing it through, so Claude's
-  extended-thinking blocks and prompt caching do not survive the trip, and Claude Code turns off
+- Cruise translates Anthropic's format rather than passing it through, so Claude's
+  extended-thinking blocks do not pass through, and Claude Code turns off
   on-demand tool search behind any gateway.
+- **Session affinity & prompt caching**: When routing through Cruise lanes (like `bb/agentic-coding`),
+  `x-cruise-session` pins member model selection across multi-turn agent sessions (1-hour sliding
+  inactivity TTL), preserving upstream prompt caching instead of redrawing a member model each turn.
+- **Traffic class attribution**: `x-cruise-class: agentic` tags Claude Code requests in the Cruise
+  cost ledger, keeping agentic coding spend distinct from interactive chat or batch pipelines.
 - The plugin never writes your key anywhere. It reaches only the Cruise base URL you configure.
 
 ## Links

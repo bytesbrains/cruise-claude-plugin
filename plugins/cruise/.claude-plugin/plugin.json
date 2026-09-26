@@ -1,7 +1,7 @@
 {
   "name": "cruise",
   "displayName": "BytesBrains Cruise",
-  "version": "0.1.10",
+  "version": "0.1.11",
   "description": "Your Cruise key's models, budget and spend over MCP, slash commands (/cruise:connect, /cruise:disconnect, /cruise:models, /cruise:switch, /cruise:status, /cruise:spend), a skill for lanes and refusals, a spend status line, and guided setup.",
   "author": {
     "name": "BytesBrains",

@@ -23,7 +23,7 @@ serves plugins from a private registry mirror. Point an entry at it:
 ```json
 {
   "name": "cruise",
-  "source": { "source": "npm", "package": "@bytesbrains/claude-code-cruise", "version": "^0.1.10" }
+  "source": { "source": "npm", "package": "@bytesbrains/claude-code-cruise", "version": "^0.1.11" }
 }
 ```
 
@@ -41,13 +41,16 @@ When a Claude subscription is expired or quota is exhausted, Claude Code fails b
 # Enable Cruise gateway routing & status line
 npx @bytesbrains/claude-code-cruise enable
 
+# Switch active model or lane
+npx @bytesbrains/claude-code-cruise switch bb/agentic-coding
+
 # Safely revert to standard Anthropic routing
 npx @bytesbrains/claude-code-cruise disable
 ```
 
 ## What is inside
 
-- **CLI `claude-code-cruise`**: standalone bootstrapper (`npx @bytesbrains/claude-code-cruise enable/disable`) for zero-dependency offline setup.
+- **CLI `claude-code-cruise`**: standalone bootstrapper (`npx @bytesbrains/claude-code-cruise enable/disable/switch`) for zero-dependency offline setup.
 - **MCP server `cruise`**: three read-only tools, `list_models`, `get_budget` and `get_spend`,
   about your key's own project.
 - **Command `/cruise:connect`**: route Claude Code through Cruise and install the status line in 1 step (including gateway session affinity and traffic class tagging).

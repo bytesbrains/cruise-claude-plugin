@@ -581,5 +581,80 @@ describe("the CLI bootstrapper", () => {
     expect(after.stdout).toMatch(/Headers:\s+.*x-cruise-class: agentic/);
     expect(after.stdout).toMatch(/x-cruise-session: claude-code-/);
   });
+
+  it("switch rejects missing model argument", () => {
+    const tmp = mkdtempSync(path.join(tmpdir(), "cruise-cli-test-"));
+    const out = runCli(["switch"], { CLAUDE_CONFIG_DIR: tmp });
+    expect(out.status).toBe(1);
+    expect(out.stderr).toMatch(/Model or lane ID is required/);
+  });
+
+  it("switch updates ANTHROPIC_MODEL and preserves existing settings", () => {
+    const tmp = mkdtempSync(path.join(tmpdir(), "cruise-cli-test-"));
+    const settingsPath = path.join(tmp, "settings.json");
+
+    // Enable first
+    runCli(["enable"], { CLAUDE_CONFIG_DIR: tmp, CRUISE_API_KEY: LIVE_KEY });
+
+    // Switch to gemini
+    const switchOut = runCli(["switch", "google-ai-studio/gemini-3.8-flash", "--skip-check"], {
+      CLAUDE_CONFIG_DIR: tmp,
+    });
+    expect(switchOut.status).toBe(0);
+    expect(switchOut.stdout).toMatch(/Active model switched to "google-ai-studio\/gemini-3.8-flash"/);
+
+    const settings = JSON.parse(readFileSync(settingsPath, "utf8"));
+    expect(settings.env.ANTHROPIC_MODEL).toBe("google-ai-studio/gemini-3.8-flash");
+    expect(settings.env.ANTHROPIC_BASE_URL).toBe("https://cruise.bytesbrains.net");
+    expect(settings.env.CLAUDE_CODE_ATTRIBUTION_HEADER).toBe("0");
+    expect(settings.env.CLAUDE_CODE_AUTO_MODE_SERVER).toBe("0");
+  });
+
+  it("switch warns when model has tools: false in catalogue", async () => {
+    const tmp = mkdtempSync(path.join(tmpdir(), "cruise-cli-test-"));
+    const settingsPath = path.join(tmp, "settings.json");
+
+    // Mock Cruise server returning a model with tools: false
+    const server = createServer((_request, response) => {
+      response.setHeader("content-type", "application/json");
+      response.end(
+        JSON.stringify({
+          data: [
+            {
+              id: "test/no-tools-model",
+              "x-cruise": { tools: false },
+            },
+          ],
+        }),
+      );
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const { port } = server.address() as { port: number };
+
+    // Asynchronous spawn: spawnSync would block the event loop, preventing the HTTP server from responding
+    const child = spawn(process.execPath, [cli, "switch", "test/no-tools-model"], {
+      env: {
+        PATH: process.env.PATH ?? "",
+        CLAUDE_CONFIG_DIR: tmp,
+        CRUISE_API_KEY: LIVE_KEY,
+        CRUISE_BASE_URL: `http://127.0.0.1:${port}`,
+      },
+    });
+
+    let stderr = "";
+    let stdout = "";
+    child.stdout.on("data", (chunk: Buffer) => (stdout += chunk.toString()));
+    child.stderr.on("data", (chunk: Buffer) => (stderr += chunk.toString()));
+
+    const exitCode = await new Promise<number | null>((resolve) => {
+      child.on("close", resolve);
+    });
+    server.close();
+
+    expect(exitCode).toBe(0);
+    expect(stderr).toMatch(/Warning: Model "test\/no-tools-model" has tools: false in Cruise/);
+    const settings = JSON.parse(readFileSync(settingsPath, "utf8"));
+    expect(settings.env.ANTHROPIC_MODEL).toBe("test/no-tools-model");
+  });
 });
 

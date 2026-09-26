@@ -23,7 +23,7 @@ serves plugins from a private registry mirror. Point an entry at it:
 ```json
 {
   "name": "cruise",
-  "source": { "source": "npm", "package": "@bytesbrains/claude-code-cruise", "version": "^0.1.8" }
+  "source": { "source": "npm", "package": "@bytesbrains/claude-code-cruise", "version": "^0.1.9" }
 }
 ```
 
@@ -33,8 +33,21 @@ Then put a Cruise key in your environment, restart Claude Code and run `/cruise:
 export CRUISE_API_KEY=cru_live_…
 ```
 
+### Standalone CLI Bootstrapper
+
+When a Claude subscription is expired or quota is exhausted, Claude Code fails before it can execute any slash command. To bootstrap offline:
+
+```sh
+# Enable Cruise gateway routing & status line
+npx @bytesbrains/claude-code-cruise enable
+
+# Safely revert to standard Anthropic routing
+npx @bytesbrains/claude-code-cruise disable
+```
+
 ## What is inside
 
+- **CLI `claude-code-cruise`**: standalone bootstrapper (`npx @bytesbrains/claude-code-cruise enable/disable`) for zero-dependency offline setup.
 - **MCP server `cruise`**: three read-only tools, `list_models`, `get_budget` and `get_spend`,
   about your key's own project.
 - **Command `/cruise:connect`**: route Claude Code through Cruise and install the status line in 1 step.

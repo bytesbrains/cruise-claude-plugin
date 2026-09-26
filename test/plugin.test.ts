@@ -302,16 +302,21 @@ describe("the CLI bootstrapper", () => {
     expect(out.stderr).toMatch(/CRUISE_API_KEY is not set/);
   });
 
+  const LIVE_KEY = ["cru", "live", "testkey"].join("_");
+  const DEMO_KEY = ["cru", "demo", "testkey"].join("_");
+  const INVALID_CHAR_KEY = ["cru", "live", "bad key!"].join("_");
+  const UNRECOGNIZED_KEY = "unrecognized_prefix_key";
+
   it("enable fails when CRUISE_API_KEY has invalid characters", () => {
     const tmp = mkdtempSync(path.join(tmpdir(), "cruise-cli-test-"));
-    const out = runCli(["enable"], { CLAUDE_CONFIG_DIR: tmp, CRUISE_API_KEY: "cru_live_invalid key!" });
+    const out = runCli(["enable"], { CLAUDE_CONFIG_DIR: tmp, CRUISE_API_KEY: INVALID_CHAR_KEY });
     expect(out.status).toBe(1);
     expect(out.stderr).toMatch(/invalid characters/);
   });
 
   it("enable fails when CRUISE_API_KEY has unrecognized prefix without custom URL", () => {
     const tmp = mkdtempSync(path.join(tmpdir(), "cruise-cli-test-"));
-    const out = runCli(["enable"], { CLAUDE_CONFIG_DIR: tmp, CRUISE_API_KEY: "sk-ant-12345" });
+    const out = runCli(["enable"], { CLAUDE_CONFIG_DIR: tmp, CRUISE_API_KEY: UNRECOGNIZED_KEY });
     expect(out.status).toBe(1);
     expect(out.stderr).toMatch(/recognized Cruise prefix/);
   });
@@ -334,11 +339,11 @@ describe("the CLI bootstrapper", () => {
     );
 
     // Enable with demo key prefix
-    const out = runCli(["enable"], { CLAUDE_CONFIG_DIR: tmp, CRUISE_API_KEY: "cru_demo_test" });
+    const out = runCli(["enable"], { CLAUDE_CONFIG_DIR: tmp, CRUISE_API_KEY: DEMO_KEY });
     expect(out.status).toBe(0);
     expect(out.stdout).toMatch(/BytesBrains Cruise gateway enabled/);
     expect(out.stdout).toMatch(/https:\/\/cruise-demo\.bytesbrains\.net/);
-    expect(out.stdout).not.toMatch(/cru_demo_test/); // Does not leak key
+    expect(out.stdout).not.toMatch(new RegExp(DEMO_KEY)); // Does not leak key
 
     // Check status line installed and executable
     const statusline = path.join(tmp, "cruise-statusline.sh");
@@ -355,9 +360,10 @@ describe("the CLI bootstrapper", () => {
     expect(settings.env.ANTHROPIC_DEFAULT_HAIKU_MODEL).toBe("bb/chat-assistant");
     expect(settings.env.CLAUDE_CODE_ATTRIBUTION_HEADER).toBe("0");
     expect(settings.apiKeyHelper).toBe('printf %s "$CRUISE_API_KEY"');
+    // Points to custom CLAUDE_CONFIG_DIR path
     expect(settings.statusLine).toEqual({
       type: "command",
-      command: "~/.claude/cruise-statusline.sh",
+      command: path.join(tmp, "cruise-statusline.sh"),
     });
   });
 
@@ -366,7 +372,7 @@ describe("the CLI bootstrapper", () => {
     const settingsPath = path.join(tmp, "settings.json");
 
     // Enable first
-    runCli(["enable"], { CLAUDE_CONFIG_DIR: tmp, CRUISE_API_KEY: "cru_live_key" });
+    runCli(["enable"], { CLAUDE_CONFIG_DIR: tmp, CRUISE_API_KEY: LIVE_KEY });
     let settings = JSON.parse(readFileSync(settingsPath, "utf8"));
     expect(settings.env.ANTHROPIC_BASE_URL).toBe("https://cruise.bytesbrains.net");
 
@@ -393,6 +399,28 @@ describe("the CLI bootstrapper", () => {
     expect(noopOut.stdout).toMatch(/not active/);
   });
 
+  it("disable cleanly removes custom CRUISE_BASE_URL even without bytesbrains substring", () => {
+    const tmp = mkdtempSync(path.join(tmpdir(), "cruise-cli-test-"));
+    const settingsPath = path.join(tmp, "settings.json");
+
+    // Enable with custom URL that does not mention bytesbrains or cruise
+    runCli(["enable"], {
+      CLAUDE_CONFIG_DIR: tmp,
+      CRUISE_API_KEY: LIVE_KEY,
+      CRUISE_BASE_URL: "https://my-internal-proxy.local:9000",
+    });
+    let settings = JSON.parse(readFileSync(settingsPath, "utf8"));
+    expect(settings.env.ANTHROPIC_BASE_URL).toBe("https://my-internal-proxy.local:9000");
+
+    // Disable should cleanly remove it
+    const disableOut = runCli(["disable"], { CLAUDE_CONFIG_DIR: tmp });
+    expect(disableOut.status).toBe(0);
+    expect(disableOut.stdout).toMatch(/Removed:\s+.*env\.ANTHROPIC_BASE_URL/);
+
+    const cleaned = JSON.parse(readFileSync(settingsPath, "utf8"));
+    expect(cleaned.env).toBeUndefined();
+  });
+
   it("disable exits cleanly when settings file does not exist", () => {
     const tmp = mkdtempSync(path.join(tmpdir(), "cruise-cli-test-"));
     const out = runCli(["disable"], { CLAUDE_CONFIG_DIR: tmp });
@@ -405,7 +433,7 @@ describe("the CLI bootstrapper", () => {
     const before = runCli(["status"], { CLAUDE_CONFIG_DIR: tmp });
     expect(before.stdout).toMatch(/Disabled/);
 
-    runCli(["enable"], { CLAUDE_CONFIG_DIR: tmp, CRUISE_API_KEY: "cru_live_key" });
+    runCli(["enable"], { CLAUDE_CONFIG_DIR: tmp, CRUISE_API_KEY: LIVE_KEY });
     const after = runCli(["status"], { CLAUDE_CONFIG_DIR: tmp });
     expect(after.stdout).toMatch(/Enabled/);
     expect(after.stdout).toMatch(/https:\/\/cruise\.bytesbrains\.net/);

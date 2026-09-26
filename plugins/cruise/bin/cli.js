@@ -130,10 +130,15 @@ function enable(options = {}) {
 
   settings.apiKeyHelper = 'printf %s "$CRUISE_API_KEY"';
 
+  const isDefaultClaudeDir = claudeDir === path.join(os.homedir(), ".claude");
+  const statusLineCommand = isDefaultClaudeDir
+    ? "~/.claude/cruise-statusline.sh"
+    : path.join(claudeDir, "cruise-statusline.sh");
+
   if (statusLineInstalled) {
     settings.statusLine = {
       type: "command",
-      command: "~/.claude/cruise-statusline.sh",
+      command: statusLineCommand,
     };
   }
 
@@ -144,7 +149,7 @@ function enable(options = {}) {
   console.log(`  Model:        ${settings.env.ANTHROPIC_MODEL}`);
   console.log(`  Haiku Model:  ${settings.env.ANTHROPIC_DEFAULT_HAIKU_MODEL}`);
   if (statusLineInstalled) {
-    console.log("  Status Line:  ~/.claude/cruise-statusline.sh");
+    console.log(`  Status Line:  ${statusLineCommand}`);
   }
   console.log(`  Config File:  ${settingsPath}`);
   console.log("\nRestart Claude Code to begin routing model requests through Cruise.");
@@ -170,10 +175,23 @@ function disable() {
   let modified = false;
   const removed = [];
 
+  const isCruiseConfigured = Boolean(
+    (settings.apiKeyHelper && settings.apiKeyHelper.includes("CRUISE_API_KEY")) ||
+    (settings.statusLine && typeof settings.statusLine.command === "string" && settings.statusLine.command.includes("cruise-statusline.sh")) ||
+    (settings.env && (
+      (settings.env.ANTHROPIC_BASE_URL && (settings.env.ANTHROPIC_BASE_URL.includes("bytesbrains") || settings.env.ANTHROPIC_BASE_URL.includes("cruise"))) ||
+      settings.env.ANTHROPIC_DEFAULT_HAIKU_MODEL === "bb/chat-assistant" ||
+      (settings.env.ANTHROPIC_MODEL && (settings.env.ANTHROPIC_MODEL.startsWith("bb/") || settings.env.ANTHROPIC_MODEL.includes("cruise")))
+    ))
+  );
+
   if (settings.env && typeof settings.env === "object" && !Array.isArray(settings.env)) {
     if (
       settings.env.ANTHROPIC_BASE_URL &&
-      (settings.env.ANTHROPIC_BASE_URL.includes("bytesbrains") || settings.env.ANTHROPIC_BASE_URL.includes("cruise"))
+      (isCruiseConfigured ||
+        settings.env.ANTHROPIC_BASE_URL.includes("bytesbrains") ||
+        settings.env.ANTHROPIC_BASE_URL.includes("cruise") ||
+        (process.env.CRUISE_BASE_URL && settings.env.ANTHROPIC_BASE_URL === process.env.CRUISE_BASE_URL))
     ) {
       delete settings.env.ANTHROPIC_BASE_URL;
       removed.push("env.ANTHROPIC_BASE_URL");

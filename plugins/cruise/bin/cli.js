@@ -12,6 +12,19 @@ const crypto = require("node:crypto");
 
 const KNOWN_PREFIXES = ["cru_live_", "cru_test_", "cru_demo_", "cru_svc_"];
 const SESSION_ID_REGEX = /^[A-Za-z0-9._:-]{1,128}$/;
+const DEFAULT_API_KEY_HELPER = 'printf %s "${CRUISE_API_KEY:-missing_cruise_key}"';
+const LEGACY_API_KEY_HELPER = 'printf %s "$CRUISE_API_KEY"';
+
+function migrateSettings(settings) {
+  if (!settings || typeof settings !== "object") {
+    return false;
+  }
+  if (settings.apiKeyHelper === LEGACY_API_KEY_HELPER) {
+    settings.apiKeyHelper = DEFAULT_API_KEY_HELPER;
+    return true;
+  }
+  return false;
+}
 
 function validateSessionId(sessionId) {
   if (!sessionId || typeof sessionId !== "string" || !SESSION_ID_REGEX.test(sessionId)) {
@@ -220,7 +233,7 @@ function enable(options = {}) {
     requestedSessionId
   );
 
-  settings.apiKeyHelper = 'printf %s "${CRUISE_API_KEY:-missing_cruise_key}"';
+  settings.apiKeyHelper = DEFAULT_API_KEY_HELPER;
 
   const isDefaultClaudeDir = claudeDir === path.join(os.homedir(), ".claude");
   const statusLineCommand = isDefaultClaudeDir
@@ -396,6 +409,15 @@ function status() {
     return;
   }
 
+  const migrated = migrateSettings(settings);
+  if (migrated) {
+    try {
+      fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + "\n", "utf8");
+    } catch {
+      // ignore write error
+    }
+  }
+
   console.log("Cruise LLM gateway: Enabled");
   console.log(`  Base URL:     ${settings.env?.ANTHROPIC_BASE_URL || "(not set)"}`);
   console.log(`  Model:        ${settings.env?.ANTHROPIC_MODEL || "(default)"}`);
@@ -406,6 +428,9 @@ function status() {
   }
   console.log(`  Status Line:  ${settings.statusLine?.command || "(not set)"}`);
   console.log(`  Config File:  ${settingsPath}`);
+  if (migrated) {
+    console.log("  Notice:       Upgraded legacy apiKeyHelper to include fallback token.");
+  }
 }
 
 async function switchModel(targetModel, options = {}) {
@@ -439,6 +464,8 @@ async function switchModel(targetModel, options = {}) {
   if (!settings.env || typeof settings.env !== "object" || Array.isArray(settings.env)) {
     settings.env = {};
   }
+
+  migrateSettings(settings);
 
   const apiKey = process.env.CRUISE_API_KEY;
   const baseUrl = detectBaseUrl(apiKey, process.env.CRUISE_BASE_URL || settings.env.ANTHROPIC_BASE_URL);
@@ -496,8 +523,9 @@ async function switchModel(targetModel, options = {}) {
 function printHelp() {
   console.log(`BytesBrains Cruise for Claude Code — CLI Bootstrapper
 
-When Claude Code cannot start due to an expired subscription or quota exhaustion,
-this zero-dependency CLI configures Cruise LLM gateway routing offline.
+When Claude Code cannot start due to an expired subscription, quota exhaustion,
+or auth helper failure when CRUISE_API_KEY is unset, this zero-dependency
+CLI configures Cruise LLM gateway routing offline.
 
 Usage:
   npx @bytesbrains/claude-code-cruise <command> [options]
@@ -590,6 +618,7 @@ module.exports = {
   disable,
   status,
   switchModel,
+  migrateSettings,
   validateKey,
   validateSessionId,
   mergeCustomHeaders,
@@ -600,4 +629,6 @@ module.exports = {
   getSettingsPath,
   KNOWN_PREFIXES,
   SESSION_ID_REGEX,
+  DEFAULT_API_KEY_HELPER,
+  LEGACY_API_KEY_HELPER,
 };

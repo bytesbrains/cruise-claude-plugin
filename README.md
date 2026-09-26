@@ -50,7 +50,7 @@ for example an internal one that pins versions or mirrors a registry. Point an e
 
 ### Standalone CLI Bootstrapper
 
-When a Claude subscription is expired or quota is exhausted, Claude Code fails before it can execute any prompt or slash command. To resolve this chicken-and-egg problem, the npm package provides a zero-dependency CLI executable that configures Cruise gateway routing and status line completely offline:
+When a Claude subscription is expired or quota is exhausted, or when Claude Code is locked out by an authentication helper failure because `CRUISE_API_KEY` was not exported in a new terminal, Claude Code fails before it can execute any prompt or slash command. To resolve this offline:
 
 ```sh
 # Enable Cruise gateway routing & status line
@@ -59,10 +59,10 @@ npx @bytesbrains/claude-code-cruise enable
 # Switch active model or lane
 npx @bytesbrains/claude-code-cruise switch bb/agentic-coding
 
-# Check current gateway status
+# Check current gateway status and auto-upgrade legacy settings
 npx @bytesbrains/claude-code-cruise status
 
-# Safely revert to standard Anthropic routing
+# Safely revert to standard Anthropic routing offline
 npx @bytesbrains/claude-code-cruise disable
 ```
 
@@ -106,6 +106,7 @@ The tools read only your key's own project and never change anything.
 | You see | Means | Do |
 |---|---|---|
 | `/cruise:setup` or the MCP server: **401 "Incorrect API key provided"**, with `CRUISE_API_KEY` unset when Claude Code started | Claude Code sent an empty key. It reads its environment once, at start | Export the key in your shell, quit Claude Code, reopen it from that shell |
+| `Your apiKeyHelper script is failing` | `CRUISE_API_KEY` is not exported in this terminal (or legacy helper configured) | Export `CRUISE_API_KEY` and restart, run `npx @bytesbrains/claude-code-cruise status` to auto-upgrade, or `disable` to revert offline |
 | The same 401 with the key set | The key is wrong for this Cruise host, or revoked | Check `CRUISE_BASE_URL` against the key's prefix: a `cru_demo_` key only works with the demo host. Then ask for a new key |
 | No `cruise` server in `/mcp` | The plugin is not installed or not enabled | Run `/plugin` |
 | Status line: `Cruise: set CRUISE_API_KEY` | The key is not in the status line's environment | Export it where Claude Code starts |

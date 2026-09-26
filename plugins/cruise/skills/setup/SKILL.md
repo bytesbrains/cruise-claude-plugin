@@ -66,6 +66,7 @@ overwrite other keys — and show the diff before writing:
     "ANTHROPIC_MODEL": "bb/agentic-coding",
     "ANTHROPIC_DEFAULT_HAIKU_MODEL": "bb/chat-assistant",
     "CLAUDE_CODE_ATTRIBUTION_HEADER": "0",
+    "CLAUDE_CODE_AUTO_MODE_SERVER": "0",
     "ANTHROPIC_CUSTOM_HEADERS": "x-cruise-class: agentic\nx-cruise-session: claude-code-<uuid>"
   },
   "apiKeyHelper": "printf %s \"$CRUISE_API_KEY\""
@@ -76,6 +77,7 @@ Use the user's `CRUISE_BASE_URL` instead if it is set, and the model they choose
 `ANTHROPIC_MODEL`. `CLAUDE_CODE_ATTRIBUTION_HEADER=0` keeps Claude Code from prepending its
 billing attribution block: Cruise flattens `system` to one string for every upstream, so the
 block would otherwise reach the model as prompt text ([gateway protocol](https://code.claude.com/docs/en/llm-gateway-protocol.md#system-prompt-attribution-block)).
+`CLAUDE_CODE_AUTO_MODE_SERVER=0` tells Claude Code not to query the gateway for server-side classifier checks in Auto Mode until Cruise implements the server-side safeguards protocol ([auto mode classifier billing](https://code.claude.com/docs/en/auto-mode-classifier-billing)).
 `ANTHROPIC_CUSTOM_HEADERS` passes `x-cruise-class: agentic` to classify requests in the
 Cruise ledger, and `x-cruise-session: claude-code-<uuid>` to pin member model selection across
 turns on lanes like `bb/agentic-coding`, maintaining upstream prompt caching.

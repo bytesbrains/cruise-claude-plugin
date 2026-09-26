@@ -75,10 +75,12 @@ Read `~/.claude/settings.json` (initialize as `{}` if absent) and merge:
          "ANTHROPIC_MODEL": "<current env.ANTHROPIC_MODEL or bb/agentic-coding>",
          "ANTHROPIC_DEFAULT_HAIKU_MODEL": "bb/chat-assistant",
          "CLAUDE_CODE_ATTRIBUTION_HEADER": "0",
+         "CLAUDE_CODE_AUTO_MODE_SERVER": "0",
          "ANTHROPIC_CUSTOM_HEADERS": "x-cruise-class: agentic\nx-cruise-session: claude-code-<uuid>"
        }
      }
      ```
+   - **`CLAUDE_CODE_AUTO_MODE_SERVER: "0"`**: Tells Claude Code not to query the gateway for server-side classifier checks in Auto Mode until Cruise implements the server-side safeguards protocol ([auto mode classifier billing](https://code.claude.com/docs/en/auto-mode-classifier-billing)), avoiding compatibility notices and prompt holds.
    - **Gateway Custom Headers (`ANTHROPIC_CUSTOM_HEADERS`)**:
      - `x-cruise-class: agentic`: Tags all Claude Code requests in the Cruise cost ledger under the `agentic` traffic class, separating agentic coding spend from interactive chat or batch pipelines.
      - `x-cruise-session: claude-code-<id>`: Session affinity header (1–128 characters matching `[A-Za-z0-9._:-]`). Cruise uses this to pin member model selection for the duration of an agent workflow (1-hour sliding TTL refreshed per request) when routing through Cruise lanes like `bb/agentic-coding`. This prevents mid-session model shifts and maintains upstream prompt caching across multi-turn agent sessions.

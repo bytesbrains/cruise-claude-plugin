@@ -88,9 +88,10 @@ Read `~/.claude/settings.json` (initialize as `{}` if absent) and merge:
 2. **`apiKeyHelper`**:
    ```json
    {
-     "apiKeyHelper": "printf %s \"$CRUISE_API_KEY\""
+     "apiKeyHelper": "printf %s \"${CRUISE_API_KEY:-missing_cruise_key}\""
    }
    ```
+   Uses a non-empty fallback token (`missing_cruise_key`) when `CRUISE_API_KEY` is unset or empty, ensuring Claude Code does not treat the helper script as failing and lock out slash commands like `/cruise:disconnect` or `/cruise:setup`.
 3. **`statusLine`**:
    Only configure `statusLine` if `statusline_copied` was successful and `~/.claude/cruise-statusline.sh` exists and is executable:
    ```json

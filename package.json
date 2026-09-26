@@ -1,7 +1,7 @@
 {
   "name": "cruise-claude-plugin",
   "private": true,
-  "version": "0.1.11",
+  "version": "0.1.12",
   "description": "Development of the BytesBrains Cruise plugin for Claude Code and the marketplace that serves it. Never published: the npm package is plugins/cruise (@bytesbrains/claude-code-cruise), and every version here follows plugins/cruise/.claude-plugin/plugin.json.",
   "license": "Apache-2.0",
   "repository": {

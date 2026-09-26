@@ -172,7 +172,7 @@ describe("the commands", () => {
     // Settings merge & credentials
     expect(connect).toMatch(/Preserve all unrelated environment variables/i);
     expect(connect).toMatch(/apiKeyHelper/);
-    expect(connect).toMatch(/printf %s \\"\$CRUISE_API_KEY\\"/);
+    expect(connect).toMatch(/printf %s \\"\$\{CRUISE_API_KEY:-missing_cruise_key\}\\"/);
     expect(connect).toMatch(/x-cruise-class: agentic/);
     expect(connect).toMatch(/x-cruise-session/);
     expect(connect).toMatch(/ANTHROPIC_CUSTOM_HEADERS/);
@@ -371,7 +371,7 @@ describe("the CLI bootstrapper", () => {
     expect(settings.env.CLAUDE_CODE_AUTO_MODE_SERVER).toBe("0");
     expect(settings.env.ANTHROPIC_CUSTOM_HEADERS).toMatch(/x-cruise-class: agentic/);
     expect(settings.env.ANTHROPIC_CUSTOM_HEADERS).toMatch(/x-cruise-session: claude-code-[A-Za-z0-9-]+/);
-    expect(settings.apiKeyHelper).toBe('printf %s "$CRUISE_API_KEY"');
+    expect(settings.apiKeyHelper).toBe('printf %s "${CRUISE_API_KEY:-missing_cruise_key}"');
     // Points to custom CLAUDE_CONFIG_DIR path
     expect(settings.statusLine).toEqual({
       type: "command",
@@ -538,6 +538,58 @@ describe("the CLI bootstrapper", () => {
     const noopOut = runCli(["disable"], { CLAUDE_CONFIG_DIR: tmp });
     expect(noopOut.status).toBe(0);
     expect(noopOut.stdout).toMatch(/not active/);
+  });
+
+  it("apiKeyHelper command outputs key when set and fallback token when unset or empty", () => {
+    const tmp = mkdtempSync(path.join(tmpdir(), "cruise-cli-test-"));
+    const settingsPath = path.join(tmp, "settings.json");
+
+    runCli(["enable"], { CLAUDE_CONFIG_DIR: tmp, CRUISE_API_KEY: LIVE_KEY });
+    const settings = JSON.parse(readFileSync(settingsPath, "utf8"));
+    const helperCommand = settings.apiKeyHelper;
+    expect(helperCommand).toBe('printf %s "${CRUISE_API_KEY:-missing_cruise_key}"');
+
+    // Executed with CRUISE_API_KEY set
+    const withKey = spawnSync("sh", ["-c", helperCommand], {
+      encoding: "utf8",
+      env: { CRUISE_API_KEY: LIVE_KEY },
+    });
+    expect(withKey.status).toBe(0);
+    expect(withKey.stdout).toBe(LIVE_KEY);
+
+    // Executed with CRUISE_API_KEY unset
+    const withoutKey = spawnSync("sh", ["-c", helperCommand], {
+      encoding: "utf8",
+      env: {},
+    });
+    expect(withoutKey.status).toBe(0);
+    expect(withoutKey.stdout).toBe("missing_cruise_key");
+
+    // Executed with CRUISE_API_KEY empty string
+    const emptyKey = spawnSync("sh", ["-c", helperCommand], {
+      encoding: "utf8",
+      env: { CRUISE_API_KEY: "" },
+    });
+    expect(emptyKey.status).toBe(0);
+    expect(emptyKey.stdout).toBe("missing_cruise_key");
+  });
+
+  it("disable cleanly removes legacy apiKeyHelper without fallback token", () => {
+    const tmp = mkdtempSync(path.join(tmpdir(), "cruise-cli-test-"));
+    const settingsPath = path.join(tmp, "settings.json");
+
+    writeFileSync(
+      settingsPath,
+      JSON.stringify({
+        apiKeyHelper: 'printf %s "$CRUISE_API_KEY"',
+      }),
+    );
+
+    const disableOut = runCli(["disable"], { CLAUDE_CONFIG_DIR: tmp });
+    expect(disableOut.status).toBe(0);
+    expect(disableOut.stdout).toMatch(/BytesBrains Cruise gateway disabled/);
+    const cleaned = JSON.parse(readFileSync(settingsPath, "utf8"));
+    expect(cleaned.apiKeyHelper).toBeUndefined();
   });
 
   it("disable cleanly removes custom CRUISE_BASE_URL even without bytesbrains substring", () => {

@@ -69,7 +69,7 @@ overwrite other keys — and show the diff before writing:
     "CLAUDE_CODE_AUTO_MODE_SERVER": "0",
     "ANTHROPIC_CUSTOM_HEADERS": "x-cruise-class: agentic\nx-cruise-session: claude-code-<uuid>"
   },
-  "apiKeyHelper": "printf %s \"$CRUISE_API_KEY\""
+  "apiKeyHelper": "printf %s \"${CRUISE_API_KEY:-missing_cruise_key}\""
 }
 ```
 
@@ -82,8 +82,10 @@ block would otherwise reach the model as prompt text ([gateway protocol](https:/
 Cruise ledger, and `x-cruise-session: claude-code-<uuid>` to pin member model selection across
 turns on lanes like `bb/agentic-coding`, maintaining upstream prompt caching.
 The helper reads the key from the environment at run time, so the key itself never enters the
-settings file; Claude Code sends the helper's output in both headers Cruise accepts. Then tell
-them to restart Claude Code and run `/status`: the base URL should be Cruise's and the
+settings file; Claude Code sends the helper's output in both headers Cruise accepts. It provides
+a fallback non-empty token (`missing_cruise_key`) when `CRUISE_API_KEY` is unset so Claude Code
+does not hard-block the session or prevent slash commands like `/cruise:disconnect` from executing.
+Then tell them to restart Claude Code and run `/status`: the base URL should be Cruise's and the
 credential source `apiKeyHelper`. To undo, remove those keys.
 
 ## 4. The spend status line (optional — ask first)

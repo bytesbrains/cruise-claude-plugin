@@ -220,7 +220,7 @@ function enable(options = {}) {
     requestedSessionId
   );
 
-  settings.apiKeyHelper = 'printf %s "$CRUISE_API_KEY"';
+  settings.apiKeyHelper = 'printf %s "${CRUISE_API_KEY:-missing_cruise_key}"';
 
   const isDefaultClaudeDir = claudeDir === path.join(os.homedir(), ".claude");
   const statusLineCommand = isDefaultClaudeDir

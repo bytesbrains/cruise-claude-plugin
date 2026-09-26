@@ -35,7 +35,7 @@ Safely remove the Cruise gateway overrides while preserving all other user setti
    - If the `env` object becomes completely empty after removing these keys, delete the empty `env` object.
 
 2. **Remove `apiKeyHelper`**:
-   If `apiKeyHelper` is configured for `$CRUISE_API_KEY`, remove the `apiKeyHelper` key.
+   If `apiKeyHelper` is configured for `$CRUISE_API_KEY` (or references `CRUISE_API_KEY`), remove the `apiKeyHelper` key.
 
 3. **Revert `statusLine`**:
    If `statusLine.command` points to `~/.claude/cruise-statusline.sh`, remove the `statusLine` object. If the user had a different custom status line, leave it untouched.

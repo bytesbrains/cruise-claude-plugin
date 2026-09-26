@@ -24,20 +24,28 @@ function validateSessionId(sessionId) {
 }
 
 function mergeCustomHeaders(existingHeaders, sessionOverride) {
-  const lines = typeof existingHeaders === "string" ? existingHeaders.split("\n").filter(Boolean) : [];
+  const lines = typeof existingHeaders === "string"
+    ? existingHeaders.split("\n").map((l) => l.trim()).filter(Boolean)
+    : [];
   let hasClass = false;
   let hasSession = false;
   const result = [];
 
   for (const line of lines) {
-    const trimmed = line.trim();
-    if (/^x-cruise-class\s*:/i.test(trimmed)) {
-      result.push("x-cruise-class: agentic");
-      hasClass = true;
-    } else if (/^x-cruise-session\s*:/i.test(trimmed)) {
-      const sid = sessionOverride || trimmed.replace(/^x-cruise-session\s*:\s*/i, "").trim();
-      result.push(`x-cruise-session: ${sid}`);
-      hasSession = true;
+    if (/^x-cruise-class\s*:/i.test(line)) {
+      if (!hasClass) {
+        result.push("x-cruise-class: agentic");
+        hasClass = true;
+      }
+    } else if (/^x-cruise-session\s*:/i.test(line)) {
+      if (!hasSession) {
+        const sid =
+          sessionOverride !== undefined && sessionOverride !== ""
+            ? sessionOverride
+            : line.replace(/^x-cruise-session\s*:\s*/i, "").trim();
+        result.push(`x-cruise-session: ${sid}`);
+        hasSession = true;
+      }
     } else {
       result.push(line);
     }
@@ -47,7 +55,10 @@ function mergeCustomHeaders(existingHeaders, sessionOverride) {
     result.push("x-cruise-class: agentic");
   }
   if (!hasSession) {
-    const sid = sessionOverride || `claude-code-${crypto.randomUUID()}`;
+    const sid =
+      sessionOverride !== undefined && sessionOverride !== ""
+        ? sessionOverride
+        : `claude-code-${crypto.randomUUID()}`;
     result.push(`x-cruise-session: ${sid}`);
   }
 
@@ -58,13 +69,12 @@ function cleanCustomHeaders(existingHeaders) {
   if (typeof existingHeaders !== "string") {
     return { cleaned: undefined, removedCruiseHeaders: false };
   }
-  const lines = existingHeaders.split("\n").filter(Boolean);
+  const lines = existingHeaders.split("\n").map((l) => l.trim()).filter(Boolean);
   const remaining = [];
   let removedCruiseHeaders = false;
 
   for (const line of lines) {
-    const trimmed = line.trim();
-    if (/^x-cruise-(class|session)\s*:/i.test(trimmed)) {
+    if (/^x-cruise-(class|session)\s*:/i.test(line)) {
       removedCruiseHeaders = true;
     } else {
       remaining.push(line);
@@ -163,8 +173,9 @@ function enable(options = {}) {
     return false;
   }
 
-  const requestedSessionId = options.sessionId || process.env.CRUISE_SESSION_ID;
-  if (requestedSessionId) {
+  const requestedSessionId =
+    options.sessionId !== undefined ? options.sessionId : process.env.CRUISE_SESSION_ID;
+  if (requestedSessionId !== undefined) {
     const sessionCheck = validateSessionId(requestedSessionId);
     if (!sessionCheck.valid) {
       console.error(`Error: ${sessionCheck.error}`);
@@ -428,8 +439,11 @@ function run(args = process.argv.slice(2)) {
     for (let i = 1; i < args.length; i++) {
       const arg = args[i];
       if (arg === "--session-id" || arg === "-s") {
-        sessionId = args[i + 1];
-        i++;
+        if (i + 1 >= args.length) {
+          console.error("Error: Option '--session-id' requires an argument.");
+          return 1;
+        }
+        sessionId = args[++i];
       } else if (arg.startsWith("--session-id=")) {
         sessionId = arg.slice("--session-id=".length);
       } else if (arg.startsWith("-s=")) {

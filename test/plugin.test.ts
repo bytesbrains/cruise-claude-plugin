@@ -8,6 +8,7 @@
 import { execFileSync, spawn, spawnSync } from "node:child_process";
 import { existsSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
+import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, expect, it } from "vitest";
@@ -271,6 +272,8 @@ describe("the status line script", () => {
 
 describe("the CLI bootstrapper", () => {
   const cli = path.join(PLUGIN, "bin/cli.js");
+  const require = createRequire(import.meta.url);
+  const { mergeCustomHeaders, cleanCustomHeaders } = require(cli);
   const runCli = (args: string[], env: Record<string, string> = {}) =>
     spawnSync(process.execPath, [cli, ...args], {
       encoding: "utf8",
@@ -396,6 +399,61 @@ describe("the CLI bootstrapper", () => {
     const settings = JSON.parse(readFileSync(settingsPath, "utf8"));
     expect(settings.env.ANTHROPIC_CUSTOM_HEADERS).toMatch(/x-cruise-session: session_abc\.123:test-run/);
     expect(settings.env.ANTHROPIC_CUSTOM_HEADERS).toMatch(/x-cruise-class: agentic/);
+  });
+
+  it("enable rejects --session-id without an argument and empty session ID", () => {
+    const tmp = mkdtempSync(path.join(tmpdir(), "cruise-cli-test-"));
+
+    const missingArg = runCli(["enable", "--session-id"], {
+      CLAUDE_CONFIG_DIR: tmp,
+      CRUISE_API_KEY: LIVE_KEY,
+    });
+    expect(missingArg.status).toBe(1);
+    expect(missingArg.stderr).toMatch(/Option '--session-id' requires an argument/);
+
+    const missingShortArg = runCli(["enable", "-s"], {
+      CLAUDE_CONFIG_DIR: tmp,
+      CRUISE_API_KEY: LIVE_KEY,
+    });
+    expect(missingShortArg.status).toBe(1);
+    expect(missingShortArg.stderr).toMatch(/Option '--session-id' requires an argument/);
+
+    const emptyArg = runCli(["enable", "--session-id="], {
+      CLAUDE_CONFIG_DIR: tmp,
+      CRUISE_API_KEY: LIVE_KEY,
+    });
+    expect(emptyArg.status).toBe(1);
+    expect(emptyArg.stderr).toMatch(/Cruise session ID must be 1–128 characters/);
+  });
+
+  it("mergeCustomHeaders deduplicates headers and cleans whitespace lines", () => {
+    const raw = "  \n  x-cruise-class: custom\nx-cruise-class: old\n  x-cruise-session: session-1  \nx-cruise-session: session-2\n  \nX-Custom: value\n";
+    const merged = mergeCustomHeaders(raw);
+    const lines = merged.split("\n");
+    expect(lines).toEqual([
+      "x-cruise-class: agentic",
+      "x-cruise-session: session-1",
+      "X-Custom: value",
+    ]);
+
+    const overridden = mergeCustomHeaders(raw, "new-session");
+    expect(overridden.split("\n")).toEqual([
+      "x-cruise-class: agentic",
+      "x-cruise-session: new-session",
+      "X-Custom: value",
+    ]);
+  });
+
+  it("cleanCustomHeaders ignores whitespace-only lines and removes Cruise headers cleanly", () => {
+    const raw = "   \n  x-cruise-class: agentic\n  \n  x-cruise-session: sid\n   ";
+    const { cleaned, removedCruiseHeaders } = cleanCustomHeaders(raw);
+    expect(removedCruiseHeaders).toBe(true);
+    expect(cleaned).toBeUndefined();
+
+    const withOther = "   \n  x-cruise-class: agentic\n  X-Other: 1  \n   ";
+    const result2 = cleanCustomHeaders(withOther);
+    expect(result2.removedCruiseHeaders).toBe(true);
+    expect(result2.cleaned).toBe("X-Other: 1");
   });
 
   it("enable preserves non-Cruise custom headers and pre-existing session ID", () => {

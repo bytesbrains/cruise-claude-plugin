@@ -1,6 +1,6 @@
 {
   "name": "@bytesbrains/claude-code-cruise",
-  "version": "0.1.9",
+  "version": "0.1.10",
   "description": "BytesBrains Cruise for Claude Code: your key's models, budget and spend over MCP, a skill for lanes and refusals, a spend status line, and guided setup. The package root is the plugin root, for a marketplace's npm source.",
   "license": "Apache-2.0",
   "author": "BytesBrains Pte. Ltd. (https://bytesbrains.com)",

@@ -214,6 +214,7 @@ function enable(options = {}) {
   }
   settings.env.ANTHROPIC_DEFAULT_HAIKU_MODEL = "bb/chat-assistant";
   settings.env.CLAUDE_CODE_ATTRIBUTION_HEADER = "0";
+  settings.env.CLAUDE_CODE_AUTO_MODE_SERVER = "0";
   settings.env.ANTHROPIC_CUSTOM_HEADERS = mergeCustomHeaders(
     settings.env.ANTHROPIC_CUSTOM_HEADERS,
     requestedSessionId
@@ -277,7 +278,8 @@ function disable() {
       (settings.env.ANTHROPIC_BASE_URL && (settings.env.ANTHROPIC_BASE_URL.includes("bytesbrains") || settings.env.ANTHROPIC_BASE_URL.includes("cruise"))) ||
       settings.env.ANTHROPIC_DEFAULT_HAIKU_MODEL === "bb/chat-assistant" ||
       (settings.env.ANTHROPIC_MODEL && (settings.env.ANTHROPIC_MODEL.startsWith("bb/") || settings.env.ANTHROPIC_MODEL.includes("cruise"))) ||
-      (settings.env.ANTHROPIC_CUSTOM_HEADERS && settings.env.ANTHROPIC_CUSTOM_HEADERS.includes("x-cruise-"))
+      (settings.env.ANTHROPIC_CUSTOM_HEADERS && settings.env.ANTHROPIC_CUSTOM_HEADERS.includes("x-cruise-")) ||
+      settings.env.CLAUDE_CODE_AUTO_MODE_SERVER === "0"
     ))
   );
 
@@ -312,6 +314,11 @@ function disable() {
     if (settings.env.CLAUDE_CODE_ATTRIBUTION_HEADER === "0") {
       delete settings.env.CLAUDE_CODE_ATTRIBUTION_HEADER;
       removed.push("env.CLAUDE_CODE_ATTRIBUTION_HEADER");
+      modified = true;
+    }
+    if (settings.env.CLAUDE_CODE_AUTO_MODE_SERVER === "0") {
+      delete settings.env.CLAUDE_CODE_AUTO_MODE_SERVER;
+      removed.push("env.CLAUDE_CODE_AUTO_MODE_SERVER");
       modified = true;
     }
     if (settings.env.ANTHROPIC_CUSTOM_HEADERS) {

@@ -368,6 +368,7 @@ describe("the CLI bootstrapper", () => {
     expect(settings.env.ANTHROPIC_BASE_URL).toBe("https://cruise-demo.bytesbrains.net");
     expect(settings.env.ANTHROPIC_DEFAULT_HAIKU_MODEL).toBe("bb/chat-assistant");
     expect(settings.env.CLAUDE_CODE_ATTRIBUTION_HEADER).toBe("0");
+    expect(settings.env.CLAUDE_CODE_AUTO_MODE_SERVER).toBe("0");
     expect(settings.env.ANTHROPIC_CUSTOM_HEADERS).toMatch(/x-cruise-class: agentic/);
     expect(settings.env.ANTHROPIC_CUSTOM_HEADERS).toMatch(/x-cruise-session: claude-code-[A-Za-z0-9-]+/);
     expect(settings.apiKeyHelper).toBe('printf %s "$CRUISE_API_KEY"');
@@ -513,6 +514,7 @@ describe("the CLI bootstrapper", () => {
     runCli(["enable"], { CLAUDE_CONFIG_DIR: tmp, CRUISE_API_KEY: LIVE_KEY });
     let settings = JSON.parse(readFileSync(settingsPath, "utf8"));
     expect(settings.env.ANTHROPIC_BASE_URL).toBe("https://cruise.bytesbrains.net");
+    expect(settings.env.CLAUDE_CODE_AUTO_MODE_SERVER).toBe("0");
 
     // Add extra user settings
     settings.customSetting = true;
@@ -528,6 +530,7 @@ describe("the CLI bootstrapper", () => {
     const cleaned = JSON.parse(readFileSync(settingsPath, "utf8"));
     expect(cleaned.customSetting).toBe(true);
     expect(cleaned.env).toEqual({ CUSTOM_ENV: "stay" });
+    expect(cleaned.env.CLAUDE_CODE_AUTO_MODE_SERVER).toBeUndefined();
     expect(cleaned.apiKeyHelper).toBeUndefined();
     expect(cleaned.statusLine).toBeUndefined();
 

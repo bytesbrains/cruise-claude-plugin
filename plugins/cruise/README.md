@@ -23,7 +23,7 @@ serves plugins from a private registry mirror. Point an entry at it:
 ```json
 {
   "name": "cruise",
-  "source": { "source": "npm", "package": "@bytesbrains/claude-code-cruise", "version": "^0.1.7" }
+  "source": { "source": "npm", "package": "@bytesbrains/claude-code-cruise", "version": "^0.1.8" }
 }
 ```
 
@@ -40,6 +40,8 @@ export CRUISE_API_KEY=cru_live_…
 - **Command `/cruise:connect`**: route Claude Code through Cruise and install the status line in 1 step.
 - **Command `/cruise:disconnect`**: disconnect from Cruise and revert to standard Anthropic routing.
 - **Command `/cruise:models`**: list reachable models and lanes with pricing and active selection.
+- **Command `/cruise:status`**: inspect current project budget limits, wallet balance, and serve/refuse status (`/cruise:budget`).
+- **Command `/cruise:spend`**: view monthly ledger spend breakdown by lane and by model (`/cruise:spend [month]`).
 - **Command `/cruise:switch`**: switch Claude Code's active model or lane in `~/.claude/settings.json`.
 - **Skill `cruise`**: choosing a lane or a pinned model, and what each Cruise refusal means.
 - **Skill `/cruise:setup`**: guided setup. It runs only when you invoke it, and asks before it

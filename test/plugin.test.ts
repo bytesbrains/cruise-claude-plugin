@@ -106,7 +106,7 @@ describe("the skills", () => {
 describe("the commands", () => {
   it("each provide a valid frontmatter description", () => {
     const commands = readdirSync(path.join(PLUGIN, "commands"));
-    expect(commands.sort()).toEqual(["connect.md", "disconnect.md", "models.md", "switch.md"]);
+    expect(commands.sort()).toEqual(["budget.md", "connect.md", "disconnect.md", "models.md", "spend.md", "status.md", "switch.md"]);
     for (const cmd of commands) {
       const text = readFileSync(path.join(PLUGIN, "commands", cmd), "utf8");
       const front = /^---\n([\s\S]*?)\n---/.exec(text)?.[1] ?? "";
@@ -116,6 +116,29 @@ describe("the commands", () => {
     for (const cmd of ["connect.md", "disconnect.md", "switch.md"]) {
       expect(readFileSync(path.join(PLUGIN, "commands", cmd), "utf8")).toMatch(/^disable-model-invocation: true$/m);
     }
+  });
+
+  it("status, budget, and spend inspect gateway state and ledger", () => {
+    for (const cmd of ["status.md", "budget.md"]) {
+      const doc = readFileSync(path.join(PLUGIN, "commands", cmd), "utf8");
+      expect(doc).toMatch(/get_budget/);
+      expect(doc).toMatch(/spend_usd/);
+      expect(doc).toMatch(/hard_usd/);
+      expect(doc).toMatch(/balance_usd/);
+      expect(doc).toMatch(/serve/i);
+      expect(doc).toMatch(/refuse/i);
+      expect(doc).toMatch(/budget_exhausted/);
+      expect(doc).toMatch(/wallet_exhausted/);
+    }
+
+    const spend = readFileSync(path.join(PLUGIN, "commands/spend.md"), "utf8");
+    const front = /^---\n([\s\S]*?)\n---/.exec(spend)?.[1] ?? "";
+    expect(front).toMatch(/^argument-hint: "\[month\]"$/m);
+    expect(spend).toMatch(/get_spend/);
+    expect(spend).toMatch(/"by":\s*"lane"/);
+    expect(spend).toMatch(/"by":\s*"model"/);
+    expect(spend).toMatch(/budget_exhausted/);
+    expect(spend).toMatch(/wallet_exhausted/);
   });
 
   it("commands do not expose credentials on command line or leak keys", () => {

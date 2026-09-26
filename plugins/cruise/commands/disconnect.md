@@ -10,19 +10,25 @@ Revert Claude Code back to direct Anthropic API / subscription routing by removi
 ## 1. Inspect `~/.claude/settings.json`
 
 Read `~/.claude/settings.json`.
-If `~/.claude/settings.json` does not exist or carries no Cruise gateway configuration, inform the user that Cruise routing is not active.
+Check if `~/.claude/settings.json` exists and whether it contains Cruise gateway settings (e.g. `ANTHROPIC_BASE_URL` containing `bytesbrains` or matching Cruise, or `apiKeyHelper` referencing `CRUISE_API_KEY`).
+
+- If `~/.claude/settings.json` is missing or contains no Cruise gateway configuration:
+  - Inform the user that Cruise routing is not active.
+  - **Halt immediately**. Do not perform any edits or save any file.
 
 ## 2. Revert Settings
 
 Safely remove the Cruise gateway overrides while preserving all other user settings:
 
 1. **Remove Gateway Environment Keys**:
-   Within the `env` object of `~/.claude/settings.json`, remove:
-   - `ANTHROPIC_BASE_URL`
-   - `ANTHROPIC_MODEL` (if set to a Cruise lane or model)
-   - `ANTHROPIC_DEFAULT_HAIKU_MODEL`
-   - `CLAUDE_CODE_ATTRIBUTION_HEADER`
-   If `env` has no remaining keys, delete the `env` block. Otherwise, retain all unrelated environment variables.
+   Within the `env` object of `~/.claude/settings.json`:
+   - If `ANTHROPIC_BASE_URL` points to Cruise (`*bytesbrains*`), remove:
+     - `ANTHROPIC_BASE_URL`
+     - `ANTHROPIC_MODEL` (if set to a Cruise lane like `bb/*` or pinned Cruise model)
+     - `ANTHROPIC_DEFAULT_HAIKU_MODEL` (if set to `bb/*`)
+     - `CLAUDE_CODE_ATTRIBUTION_HEADER` (if set to `"0"`)
+   - **Preserve all other environment variables** that the user may have configured in `env`.
+   - If the `env` object becomes completely empty after removing these keys, delete the empty `env` object.
 
 2. **Remove `apiKeyHelper`**:
    If `apiKeyHelper` is configured for `$CRUISE_API_KEY`, remove the `apiKeyHelper` key.

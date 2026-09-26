@@ -127,6 +127,32 @@ describe("the commands", () => {
       expect(text, cmd).not.toMatch(/-H\s+["']Authorization:\s*Bearer\s*\$\{?CRUISE_API_KEY/i);
     }
   });
+
+  it("connect and disconnect handle safety guards", () => {
+    const connect = readFileSync(path.join(PLUGIN, "commands/connect.md"), "utf8");
+    // Prefix validation and character check
+    expect(connect).toMatch(/cru_live_\*\|cru_test_\*\|cru_demo_\*\|cru_svc_\*/);
+    expect(connect).toMatch(/UNKNOWN_PREFIX/);
+    expect(connect).toMatch(/INVALID_CHARS/);
+    // Endpoint detection
+    expect(connect).toMatch(/https:\/\/cruise-demo\.bytesbrains\.net/);
+    expect(connect).toMatch(/https:\/\/cruise-staging\.bytesbrains-cruise\.workers\.dev/);
+    expect(connect).toMatch(/https:\/\/cruise\.bytesbrains\.net/);
+    // Statusline guard: don't configure broken statusLine if script missing
+    expect(connect).toMatch(/statusline_copied/);
+    expect(connect).toMatch(/Do NOT configure a broken `statusLine`/i);
+    // Settings merge & credentials
+    expect(connect).toMatch(/Preserve all unrelated environment variables/i);
+    expect(connect).toMatch(/apiKeyHelper/);
+    expect(connect).toMatch(/printf %s \\"\$CRUISE_API_KEY\\"/);
+
+    const disconnect = readFileSync(path.join(PLUGIN, "commands/disconnect.md"), "utf8");
+    // Guard against running when no cruise config
+    expect(disconnect).toMatch(/Halt immediately/i);
+    // Surgical removal of Cruise keys while preserving user settings
+    expect(disconnect).toMatch(/Preserve all other environment variables/i);
+    expect(disconnect).toMatch(/\*bytesbrains\*/);
+  });
 });
 
 describe("the status line script", () => {

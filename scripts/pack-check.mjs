@@ -22,6 +22,7 @@ const EXPECTED = [
   "LICENSE.txt",
   "NOTICE",
   "README.md",
+  "bin/cli.js",
   "commands/budget.md",
   "commands/connect.md",
   "commands/disconnect.md",
@@ -74,6 +75,9 @@ if (JSON.stringify(shipped) !== JSON.stringify([...EXPECTED].sort())) {
 }
 if ((statSync(path.join(pkg, "scripts/statusline.sh")).mode & 0o111) === 0) {
   fail("scripts/statusline.sh lost its executable bit");
+}
+if ((statSync(path.join(pkg, "bin/cli.js")).mode & 0o111) === 0) {
+  fail("bin/cli.js lost its executable bit");
 }
 for (const file of shipped) {
   if (CRUISE_KEY.test(readFileSync(path.join(pkg, file), "utf8"))) fail(`${file} carries something shaped like a Cruise key`);

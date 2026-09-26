@@ -6,7 +6,7 @@
 // says when it applies, and the status line prints what it should from the
 // answer Cruise actually gives.
 import { execFileSync, spawn, spawnSync } from "node:child_process";
-import { existsSync, mkdtempSync, readdirSync, readFileSync, statSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync, statSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -51,6 +51,10 @@ describe("the npm package", () => {
     expect(pkg).toMatchObject({
       name: "@bytesbrains/claude-code-cruise",
       license: "Apache-2.0",
+      bin: {
+        "claude-code-cruise": "bin/cli.js",
+        cruise: "bin/cli.js",
+      },
       repository: { url: "git+https://github.com/bytesbrains/cruise-claude-plugin.git", directory: "plugins/cruise" },
       publishConfig: { access: "public", provenance: true },
     });
@@ -258,3 +262,153 @@ describe("the status line script", () => {
     expect(requests).toBe(2);
   });
 });
+
+describe("the CLI bootstrapper", () => {
+  const cli = path.join(PLUGIN, "bin/cli.js");
+  const runCli = (args: string[], env: Record<string, string> = {}) =>
+    spawnSync(process.execPath, [cli, ...args], {
+      encoding: "utf8",
+      env: { PATH: process.env.PATH ?? "", ...env },
+    });
+
+  it("is executable and has a valid shebang", () => {
+    expect(statSync(cli).mode & 0o111).not.toBe(0);
+    const content = readFileSync(cli, "utf8");
+    expect(content.startsWith("#!/usr/bin/env node")).toBe(true);
+  });
+
+  it("prints help on --help or without arguments", () => {
+    const noArgs = runCli([]);
+    expect(noArgs.status).toBe(0);
+    expect(noArgs.stdout).toMatch(/Usage:\s+npx @bytesbrains\/claude-code-cruise/);
+    expect(noArgs.stdout).toMatch(/enable/);
+    expect(noArgs.stdout).toMatch(/disable/);
+
+    const help = runCli(["--help"]);
+    expect(help.status).toBe(0);
+    expect(help.stdout).toBe(noArgs.stdout);
+  });
+
+  it("prints version on --version", () => {
+    const out = runCli(["--version"]);
+    expect(out.status).toBe(0);
+    expect(out.stdout.trim()).toBe(json("plugins/cruise/package.json").version);
+  });
+
+  it("enable fails when CRUISE_API_KEY is missing", () => {
+    const tmp = mkdtempSync(path.join(tmpdir(), "cruise-cli-test-"));
+    const out = runCli(["enable"], { CLAUDE_CONFIG_DIR: tmp, CRUISE_API_KEY: "" });
+    expect(out.status).toBe(1);
+    expect(out.stderr).toMatch(/CRUISE_API_KEY is not set/);
+  });
+
+  it("enable fails when CRUISE_API_KEY has invalid characters", () => {
+    const tmp = mkdtempSync(path.join(tmpdir(), "cruise-cli-test-"));
+    const out = runCli(["enable"], { CLAUDE_CONFIG_DIR: tmp, CRUISE_API_KEY: "cru_live_invalid key!" });
+    expect(out.status).toBe(1);
+    expect(out.stderr).toMatch(/invalid characters/);
+  });
+
+  it("enable fails when CRUISE_API_KEY has unrecognized prefix without custom URL", () => {
+    const tmp = mkdtempSync(path.join(tmpdir(), "cruise-cli-test-"));
+    const out = runCli(["enable"], { CLAUDE_CONFIG_DIR: tmp, CRUISE_API_KEY: "sk-ant-12345" });
+    expect(out.status).toBe(1);
+    expect(out.stderr).toMatch(/recognized Cruise prefix/);
+  });
+
+  it("enable configures settings and statusline for different prefixes and custom URLs", () => {
+    const tmp = mkdtempSync(path.join(tmpdir(), "cruise-cli-test-"));
+    const settingsPath = path.join(tmp, "settings.json");
+
+    // Pre-populate user settings with unrelated vars
+    writeFileSync(
+      settingsPath,
+      JSON.stringify(
+        {
+          theme: "dark",
+          env: { USER_VAR: "custom_val", ANTHROPIC_MODEL: "anthropic/claude-sonnet-4" },
+        },
+        null,
+        2,
+      ),
+    );
+
+    // Enable with demo key prefix
+    const out = runCli(["enable"], { CLAUDE_CONFIG_DIR: tmp, CRUISE_API_KEY: "cru_demo_test" });
+    expect(out.status).toBe(0);
+    expect(out.stdout).toMatch(/BytesBrains Cruise gateway enabled/);
+    expect(out.stdout).toMatch(/https:\/\/cruise-demo\.bytesbrains\.net/);
+    expect(out.stdout).not.toMatch(/cru_demo_test/); // Does not leak key
+
+    // Check status line installed and executable
+    const statusline = path.join(tmp, "cruise-statusline.sh");
+    expect(existsSync(statusline)).toBe(true);
+    expect(statSync(statusline).mode & 0o111).not.toBe(0);
+
+    // Verify settings deep merge
+    const settings = JSON.parse(readFileSync(settingsPath, "utf8"));
+    expect(settings.theme).toBe("dark");
+    expect(settings.env.USER_VAR).toBe("custom_val");
+    // Pre-existing ANTHROPIC_MODEL preserved
+    expect(settings.env.ANTHROPIC_MODEL).toBe("anthropic/claude-sonnet-4");
+    expect(settings.env.ANTHROPIC_BASE_URL).toBe("https://cruise-demo.bytesbrains.net");
+    expect(settings.env.ANTHROPIC_DEFAULT_HAIKU_MODEL).toBe("bb/chat-assistant");
+    expect(settings.env.CLAUDE_CODE_ATTRIBUTION_HEADER).toBe("0");
+    expect(settings.apiKeyHelper).toBe('printf %s "$CRUISE_API_KEY"');
+    expect(settings.statusLine).toEqual({
+      type: "command",
+      command: "~/.claude/cruise-statusline.sh",
+    });
+  });
+
+  it("disable safely removes Cruise config and preserves other user settings", () => {
+    const tmp = mkdtempSync(path.join(tmpdir(), "cruise-cli-test-"));
+    const settingsPath = path.join(tmp, "settings.json");
+
+    // Enable first
+    runCli(["enable"], { CLAUDE_CONFIG_DIR: tmp, CRUISE_API_KEY: "cru_live_key" });
+    let settings = JSON.parse(readFileSync(settingsPath, "utf8"));
+    expect(settings.env.ANTHROPIC_BASE_URL).toBe("https://cruise.bytesbrains.net");
+
+    // Add extra user settings
+    settings.customSetting = true;
+    settings.env.CUSTOM_ENV = "stay";
+    writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
+
+    // Disable
+    const disableOut = runCli(["disable"], { CLAUDE_CONFIG_DIR: tmp });
+    expect(disableOut.status).toBe(0);
+    expect(disableOut.stdout).toMatch(/BytesBrains Cruise gateway disabled/);
+
+    // Verify settings cleaned up
+    const cleaned = JSON.parse(readFileSync(settingsPath, "utf8"));
+    expect(cleaned.customSetting).toBe(true);
+    expect(cleaned.env).toEqual({ CUSTOM_ENV: "stay" });
+    expect(cleaned.apiKeyHelper).toBeUndefined();
+    expect(cleaned.statusLine).toBeUndefined();
+
+    // Disable again is a clean no-op
+    const noopOut = runCli(["disable"], { CLAUDE_CONFIG_DIR: tmp });
+    expect(noopOut.status).toBe(0);
+    expect(noopOut.stdout).toMatch(/not active/);
+  });
+
+  it("disable exits cleanly when settings file does not exist", () => {
+    const tmp = mkdtempSync(path.join(tmpdir(), "cruise-cli-test-"));
+    const out = runCli(["disable"], { CLAUDE_CONFIG_DIR: tmp });
+    expect(out.status).toBe(0);
+    expect(out.stdout).toMatch(/not active/);
+  });
+
+  it("status reports gateway configuration accurately", () => {
+    const tmp = mkdtempSync(path.join(tmpdir(), "cruise-cli-test-"));
+    const before = runCli(["status"], { CLAUDE_CONFIG_DIR: tmp });
+    expect(before.stdout).toMatch(/Disabled/);
+
+    runCli(["enable"], { CLAUDE_CONFIG_DIR: tmp, CRUISE_API_KEY: "cru_live_key" });
+    const after = runCli(["status"], { CLAUDE_CONFIG_DIR: tmp });
+    expect(after.stdout).toMatch(/Enabled/);
+    expect(after.stdout).toMatch(/https:\/\/cruise\.bytesbrains\.net/);
+  });
+});
+

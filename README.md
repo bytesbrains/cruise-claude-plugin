@@ -48,10 +48,26 @@ for example an internal one that pins versions or mirrors a registry. Point an e
 { "name": "cruise", "source": { "source": "npm", "package": "@bytesbrains/claude-code-cruise" } }
 ```
 
+### Standalone CLI Bootstrapper
+
+When a Claude subscription is expired or quota is exhausted, Claude Code fails before it can execute any prompt or slash command. To resolve this chicken-and-egg problem, the npm package provides a zero-dependency CLI executable that configures Cruise gateway routing and status line completely offline:
+
+```sh
+# Enable Cruise gateway routing & status line
+npx @bytesbrains/claude-code-cruise enable
+
+# Check current gateway status
+npx @bytesbrains/claude-code-cruise status
+
+# Safely revert to standard Anthropic routing
+npx @bytesbrains/claude-code-cruise disable
+```
+
 ## What is inside
 
 | | |
 |---|---|
+| **CLI `claude-code-cruise`** | Standalone bootstrapper (`npx @bytesbrains/claude-code-cruise enable/disable`) for offline setup when Claude Code cannot start |
 | **MCP server `cruise`** | Three read-only tools about your key's own project: `list_models` (models and lanes you can reach, with prices), `get_budget` (what is left, and whether the next request is served), `get_spend` (a month's charges by model or lane). Reads `CRUISE_API_KEY` and `CRUISE_BASE_URL` from the environment |
 | **Command `/cruise:connect`** | Route Claude Code through Cruise and install the spend status line in one step |
 | **Command `/cruise:disconnect`** | Disconnect from Cruise gateway and restore standard Anthropic routing |

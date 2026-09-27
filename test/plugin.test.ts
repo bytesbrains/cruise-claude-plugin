@@ -23,6 +23,7 @@ const {
   migrateSettings,
   mergeCustomHeaders,
   cleanCustomHeaders,
+  detectBaseUrl,
   getCruiseEnv,
   runClaude,
 } = require(CLI);
@@ -846,6 +847,18 @@ describe("the CLI bootstrapper", () => {
       if (originalKey === undefined) delete process.env.CRUISE_API_KEY;
       else process.env.CRUISE_API_KEY = originalKey;
     }
+  });
+
+  it("detectBaseUrl resolves endpoints correctly and safely handles undefined/empty keys", () => {
+    expect(detectBaseUrl(undefined)).toBe("https://cruise.bytesbrains.net");
+    expect(detectBaseUrl(null)).toBe("https://cruise.bytesbrains.net");
+    expect(detectBaseUrl("")).toBe("https://cruise.bytesbrains.net");
+    expect(detectBaseUrl("cru_demo_key123")).toBe("https://cruise-demo.bytesbrains.net");
+    expect(detectBaseUrl("cru_test_key123")).toBe("https://cruise-staging.bytesbrains-cruise.workers.dev");
+    expect(detectBaseUrl("cru_live_key123")).toBe("https://cruise.bytesbrains.net");
+    expect(detectBaseUrl("cru_svc_key123")).toBe("https://cruise.bytesbrains.net");
+    expect(detectBaseUrl("cru_demo_key123", "https://custom.endpoint.com")).toBe("https://custom.endpoint.com");
+    expect(detectBaseUrl(undefined, "  https://custom.endpoint.com  ")).toBe("https://custom.endpoint.com");
   });
 
   it("run command fails when CRUISE_API_KEY is missing", () => {

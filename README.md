@@ -122,6 +122,7 @@ The tools read only your key's own project and never change anything.
 | Status line: `Cruise: no answer from <url>` | Cruise did not answer within three seconds, or answered with something else | Check the URL. The line retries after its one-minute cache |
 | A request refused with `budget_exhausted` | The project's cap for this period is spent | Wait for the period to reset, or raise the cap |
 | A request refused with `wallet_exhausted` | The account is out of credit. Waiting does not help | Top up the wallet |
+| HTTP 400: `Function call is missing a thought_signature in functionCall parts` | Google Gemini models with thinking enabled fail multi-turn tool calling in Claude Code ([bytesbrains-cruise#543](https://github.com/bytesbrains/bytesbrains-cruise/issues/543)) | Switch to `bb/agentic-coding` or `anthropic/claude-sonnet-5` (via `/cruise:switch bb/agentic-coding` or `npx @bytesbrains/claude-code-cruise switch bb/agentic-coding`), or run `/clear` to reset conversation context |
 
 To stop routing Claude Code through Cruise, remove the keys `/cruise:setup` added to
 `~/.claude/settings.json`: the `ANTHROPIC_*` and `CLAUDE_CODE_ATTRIBUTION_HEADER` entries under

@@ -150,11 +150,13 @@ function detectBaseUrl(apiKey, explicitUrl) {
   if (explicitUrl && explicitUrl.trim() !== "") {
     return explicitUrl.trim();
   }
-  if (apiKey.startsWith("cru_demo_")) {
-    return "https://cruise-demo.bytesbrains.net";
-  }
-  if (apiKey.startsWith("cru_test_")) {
-    return "https://cruise-staging.bytesbrains-cruise.workers.dev";
+  if (apiKey && typeof apiKey === "string") {
+    if (apiKey.startsWith("cru_demo_")) {
+      return "https://cruise-demo.bytesbrains.net";
+    }
+    if (apiKey.startsWith("cru_test_")) {
+      return "https://cruise-staging.bytesbrains-cruise.workers.dev";
+    }
   }
   return "https://cruise.bytesbrains.net";
 }
@@ -573,13 +575,19 @@ async function switchModel(targetModel, options = {}) {
     console.error("Usage: npx @bytesbrains/claude-code-cruise switch <model-or-lane> [--local]");
     console.error("Examples:");
     console.error("  npx @bytesbrains/claude-code-cruise switch bb/agentic-coding");
-    console.error("  npx @bytesbrains/claude-code-cruise switch google-ai-studio/gemini-3.8-flash --local");
+    console.error("  npx @bytesbrains/claude-code-cruise switch anthropic/claude-sonnet-5 --local");
     return false;
   }
 
   const modelId = targetModel.trim();
   const settingsPath = getSettingsPath(options);
   const claudeDir = getClaudeConfigDir(options);
+
+  if (/gemini/i.test(modelId)) {
+    console.warn(`\n⚠️  Warning: Gemini models may fail multi-turn tool calling with HTTP 400 ("missing a thought_signature").`);
+    console.warn("   Gateway fix is tracked in bytesbrains/bytesbrains-cruise#543.");
+    console.warn("   Recommended alternatives for reliable tool use: bb/agentic-coding or anthropic/claude-sonnet-5.\n");
+  }
 
   let settings = {};
   if (fs.existsSync(settingsPath)) {
@@ -622,7 +630,7 @@ async function switchModel(targetModel, options = {}) {
             console.warn(`\n⚠️  Warning: Model "${modelId}" has tools: false in Cruise.`);
             console.warn("   Claude Code requires tool calling to read/write files and execute bash commands.");
             console.warn("   You may experience degraded or non-functional tool actions with this model.");
-            console.warn("   Recommended agentic models: bb/agentic-coding, google-ai-studio/gemini-3.8-flash, anthropic/claude-sonnet-5.\n");
+            console.warn("   Recommended agentic models: bb/agentic-coding, anthropic/claude-sonnet-5.\n");
           }
         } else {
           console.warn(`\n⚠️  Notice: Model "${modelId}" was not found in the Cruise catalogue for this key.`);

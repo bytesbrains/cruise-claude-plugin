@@ -18,8 +18,10 @@ Target model or lane requested by user: `$ARGUMENTS`
      - Check whether the requested value matches a valid lane ID (e.g. `bb/agentic-coding`, `bb/chat-assistant`, `bb/code-review`) or pinned model ID (e.g. `anthropic/claude-sonnet-5`, `deepseek/deepseek-flash`) in the catalogue.
      - If the model or lane is **not found**: do NOT update settings. Inform the user that the model or lane is not recognized or not reachable for this key, display the available lanes and popular models, and ask them to select a valid ID.
      - **Check tool capability**: Check `x-cruise.tools` for the model. If `tools: false` (e.g. `openai/gpt-5.6-luna`), warn the user prominently:
-       > ⚠️ **Warning**: This model does not support tool calling in Cruise (`tools: false`). Claude Code requires tool calling to read/write files and execute bash commands. If you switch to this model, Claude Code commands and tools will not function. Recommended models with tool support: `bb/agentic-coding`, `google-ai-studio/gemini-3.8-flash`, `anthropic/claude-sonnet-5`.
+       > ⚠️ **Warning**: This model does not support tool calling in Cruise (`tools: false`). Claude Code requires tool calling to read/write files and execute bash commands. If you switch to this model, Claude Code commands and tools will not function. Recommended models with tool support: `bb/agentic-coding`, `anthropic/claude-sonnet-5`.
        Ask the user to confirm before applying a model with `tools: false`.
+     - **Check Gemini models**: If the user selects a Google Gemini model (e.g. `google-ai-studio/gemini-*`), display an advisory warning:
+       > ⚠️ **Warning**: Gemini models may fail multi-turn tool calling with HTTP 400 (`Function call is missing a thought_signature in functionCall parts`) when thinking is enabled. The underlying protocol fix is being addressed in Cruise gateway ([bytesbrains/bytesbrains-cruise#543](https://github.com/bytesbrains/bytesbrains-cruise/issues/543)). For reliable agentic coding with tool execution, recommend `bb/agentic-coding` or `anthropic/claude-sonnet-5`.
      - If it is valid: proceed to step 2 with the verified ID.
    - **If `$ARGUMENTS` is empty**:
      - Present the list of available lanes and popular models from `list_models`. Highlight lanes that have tool calling enabled (`tools: true`).

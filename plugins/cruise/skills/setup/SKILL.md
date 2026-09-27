@@ -67,6 +67,8 @@ overwrite other keys — and show the diff before writing:
     "ANTHROPIC_DEFAULT_HAIKU_MODEL": "bb/chat-assistant",
     "CLAUDE_CODE_ATTRIBUTION_HEADER": "0",
     "CLAUDE_CODE_AUTO_MODE_SERVER": "0",
+    "CLAUDE_CODE_MAX_CONTEXT_TOKENS": "1000000",
+    "CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT": "1",
     "ANTHROPIC_CUSTOM_HEADERS": "x-cruise-class: agentic\nx-cruise-session: claude-code-<uuid>"
   },
   "apiKeyHelper": "printf %s \"${CRUISE_API_KEY:-missing_cruise_key}\""
@@ -78,6 +80,8 @@ Use the user's `CRUISE_BASE_URL` instead if it is set, and the model they choose
 billing attribution block: Cruise flattens `system` to one string for every upstream, so the
 block would otherwise reach the model as prompt text ([gateway protocol](https://code.claude.com/docs/en/llm-gateway-protocol.md#system-prompt-attribution-block)).
 `CLAUDE_CODE_AUTO_MODE_SERVER=0` tells Claude Code not to query the gateway for server-side classifier checks in Auto Mode until Cruise implements the server-side safeguards protocol ([auto mode classifier billing](https://code.claude.com/docs/en/auto-mode-classifier-billing)).
+`CLAUDE_CODE_MAX_CONTEXT_TOKENS=1000000` sets Claude Code's auto-compact context window threshold to 1M tokens (the default for Cruise agentic coding and models such as Grok 4.6 and Gemini), preventing Claude Code from prematurely compacting multi-turn agentic coding sessions at 200k tokens.
+`CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT=1` disables Claude Code's local model catalog context window clamping and suppresses unknown model warnings for non-Anthropic models and Cruise lanes (`grok/*`, `deepseek/*`, `bb/*`).
 `ANTHROPIC_CUSTOM_HEADERS` passes `x-cruise-class: agentic` to classify requests in the
 Cruise ledger, and `x-cruise-session: claude-code-<uuid>` to pin member model selection across
 turns on lanes like `bb/agentic-coding`, maintaining upstream prompt caching.

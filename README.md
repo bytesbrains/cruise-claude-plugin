@@ -123,9 +123,10 @@ The tools read only your key's own project and never change anything.
 | A request refused with `budget_exhausted` | The project's cap for this period is spent | Wait for the period to reset, or raise the cap |
 | A request refused with `wallet_exhausted` | The account is out of credit. Waiting does not help | Top up the wallet |
 | HTTP 400: `Function call is missing a thought_signature in functionCall parts` | Google Gemini models with thinking enabled fail multi-turn tool calling in Claude Code ([bytesbrains-cruise#543](https://github.com/bytesbrains/bytesbrains-cruise/issues/543)) | Switch to `bb/agentic-coding` or `anthropic/claude-sonnet-5` (via `/cruise:switch bb/agentic-coding` or `npx @bytesbrains/claude-code-cruise switch bb/agentic-coding`), or run `/clear` to reset conversation context |
+| Claude Code warning: `"<model>" isn't described by this version's model catalog` | Claude Code restricts uncataloged models to 200k tokens by default | Cruise automatically sets `CLAUDE_CODE_MAX_CONTEXT_TOKENS=1000000` and `CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT=1` to guarantee a 1M token context window for agentic coding and silence the warning |
 
 To stop routing Claude Code through Cruise, remove the keys `/cruise:setup` added to
-`~/.claude/settings.json`: the `ANTHROPIC_*` and `CLAUDE_CODE_ATTRIBUTION_HEADER` entries under
+`~/.claude/settings.json`: the `ANTHROPIC_*` and `CLAUDE_CODE_*` entries under
 `env`, plus `apiKeyHelper` and `statusLine`.
 
 ## Worth knowing

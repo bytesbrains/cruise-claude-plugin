@@ -39,7 +39,7 @@ Once a valid model or lane is verified:
 
 1. Read `~/.claude/settings.json` (or `./.claude/settings.json` if `--local`, create it if absent).
 2. Ensure the `env` object exists and set `"ANTHROPIC_MODEL": "<verified-model-or-lane>"`.
-3. **Preserve all other keys** in `settings.json` and within `env` (such as `ANTHROPIC_BASE_URL`, `CLAUDE_CODE_ATTRIBUTION_HEADER`, `apiKeyHelper`, `statusLine`, `enabledPlugins`, etc.). Never overwrite or discard existing settings.
+3. **Preserve all other keys** in `settings.json` and within `env` (such as `ANTHROPIC_BASE_URL`, `CLAUDE_CODE_ATTRIBUTION_HEADER`, `apiKeyHelper`, `statusLine`, `enabledPlugins`, etc.). Ensure `CLAUDE_CODE_MAX_CONTEXT_TOKENS` (default 1M: `"1000000"`, or the model's catalogue `context_window` when on default) and `CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT: "1"` remain configured so Claude Code provides full context capacity for agentic coding and suppresses unknown model catalog warnings. Never overwrite or discard existing custom user settings.
 4. If `env.ANTHROPIC_BASE_URL` is not set, advise the user that model traffic is not yet routed through Cruise, and suggest running `/cruise:setup` to configure the gateway.
 5. Display the diff or JSON change before writing.
 

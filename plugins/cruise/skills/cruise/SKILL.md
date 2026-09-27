@@ -35,6 +35,20 @@ Cruise also supports gateway request headers for session affinity and attributio
 - `x-cruise-class`: tags the request traffic class (`agentic`, `interactive`, `scheduled`) in the Cruise ledger.
 - `x-cruise-session`: pins lane member allocation for an agent run (1–128 characters of `[A-Za-z0-9._:-]`, 1-hour sliding TTL), keeping the same member model across multi-turn interactions so upstream prompt caching remains effective.
 
+## Context Window & Auto-Compaction
+
+Claude Code enforces a conservative 200k token context window by default for models not recognized
+in its local catalog, triggering early auto-compaction and emitting warnings. When routing through Cruise:
+- `CLAUDE_CODE_MAX_CONTEXT_TOKENS: "1000000"` sets Claude Code's auto-compact context window threshold
+  to 1M tokens (the default for Cruise agentic coding and models like Grok 4.6 and Gemini), allowing
+  full utilization of large-context models without premature compaction.
+- `CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT: "1"` disables local catalog window clamping
+  and suppresses unknown model warnings for non-Anthropic models and Cruise lanes (`bb/*`, `grok/*`,
+  `deepseek/*`, `google-ai-studio/*`).
+- Switching to a model with a distinct context window in the Cruise catalogue (e.g. 2M for Gemini)
+  dynamically updates `CLAUDE_CODE_MAX_CONTEXT_TOKENS` while preserving intentional user overrides.
+
+
 
 ## Reading a refusal
 

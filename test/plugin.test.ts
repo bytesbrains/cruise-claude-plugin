@@ -23,6 +23,7 @@ const {
   migrateSettings,
   mergeCustomHeaders,
   cleanCustomHeaders,
+  detectBaseUrl,
   getCruiseEnv,
   runClaude,
 } = require(CLI);
@@ -85,6 +86,14 @@ describe("the README", () => {
     expect(local).toContain("assets/cruise-logo.svg");
     for (const src of local) expect(existsSync(path.join(ROOT, src)), src).toBe(true);
   });
+
+  it("documents thought_signature error and workaround under Troubleshooting", () => {
+    const readme = readFileSync(path.join(ROOT, "README.md"), "utf8");
+    expect(readme).toMatch(/Function call is missing a thought_signature/);
+    expect(readme).toMatch(/bytesbrains-cruise#543/);
+    expect(readme).toMatch(/bb\/agentic-coding/);
+    expect(readme).toMatch(/\/clear/);
+  });
 });
 
 describe("the MCP server config", () => {
@@ -133,6 +142,14 @@ describe("the commands", () => {
     for (const cmd of ["connect.md", "disconnect.md", "switch.md"]) {
       expect(readFileSync(path.join(PLUGIN, "commands", cmd), "utf8")).toMatch(/^disable-model-invocation: true$/m);
     }
+  });
+
+  it("switch command warns on Gemini models and tools: false", () => {
+    const switchCmd = readFileSync(path.join(PLUGIN, "commands/switch.md"), "utf8");
+    expect(switchCmd).toMatch(/thought_signature/);
+    expect(switchCmd).toMatch(/bytesbrains\/bytesbrains-cruise#543/);
+    expect(switchCmd).toMatch(/bb\/agentic-coding/);
+    expect(switchCmd).toMatch(/anthropic\/claude-sonnet-5/);
   });
 
   it("status, budget, and spend inspect gateway state and ledger", () => {
@@ -729,12 +746,25 @@ describe("the CLI bootstrapper", () => {
     });
     expect(switchOut.status).toBe(0);
     expect(switchOut.stdout).toMatch(/Active model switched to "google-ai-studio\/gemini-3.8-flash"/);
+    expect(switchOut.stderr).toMatch(/Warning: Gemini models may fail multi-turn tool calling with HTTP 400 \("missing a thought_signature"\)/);
+    expect(switchOut.stderr).toMatch(/bytesbrains\/bytesbrains-cruise#543/);
+    expect(switchOut.stderr).toMatch(/bb\/agentic-coding or anthropic\/claude-sonnet-5/);
 
     const settings = JSON.parse(readFileSync(settingsPath, "utf8"));
     expect(settings.env.ANTHROPIC_MODEL).toBe("google-ai-studio/gemini-3.8-flash");
     expect(settings.env.ANTHROPIC_BASE_URL).toBe("https://cruise.bytesbrains.net");
     expect(settings.env.CLAUDE_CODE_ATTRIBUTION_HEADER).toBe("0");
     expect(settings.env.CLAUDE_CODE_AUTO_MODE_SERVER).toBe("0");
+  });
+
+  it("switch does not warn when switching to non-Gemini models", () => {
+    const tmp = mkdtempSync(path.join(tmpdir(), "cruise-cli-test-"));
+    const switchOut = runCli(["switch", "anthropic/claude-sonnet-5", "--skip-check"], {
+      CLAUDE_CONFIG_DIR: tmp,
+    });
+    expect(switchOut.status).toBe(0);
+    expect(switchOut.stderr).not.toMatch(/thought_signature/);
+    expect(switchOut.stdout).toMatch(/Active model switched to "anthropic\/claude-sonnet-5"/);
   });
 
   it("switch warns when model has tools: false in catalogue", async () => {
@@ -817,6 +847,18 @@ describe("the CLI bootstrapper", () => {
       if (originalKey === undefined) delete process.env.CRUISE_API_KEY;
       else process.env.CRUISE_API_KEY = originalKey;
     }
+  });
+
+  it("detectBaseUrl resolves endpoints correctly and safely handles undefined/empty keys", () => {
+    expect(detectBaseUrl(undefined)).toBe("https://cruise.bytesbrains.net");
+    expect(detectBaseUrl(null)).toBe("https://cruise.bytesbrains.net");
+    expect(detectBaseUrl("")).toBe("https://cruise.bytesbrains.net");
+    expect(detectBaseUrl("cru_demo_key123")).toBe("https://cruise-demo.bytesbrains.net");
+    expect(detectBaseUrl("cru_test_key123")).toBe("https://cruise-staging.bytesbrains-cruise.workers.dev");
+    expect(detectBaseUrl("cru_live_key123")).toBe("https://cruise.bytesbrains.net");
+    expect(detectBaseUrl("cru_svc_key123")).toBe("https://cruise.bytesbrains.net");
+    expect(detectBaseUrl("cru_demo_key123", "https://custom.endpoint.com")).toBe("https://custom.endpoint.com");
+    expect(detectBaseUrl(undefined, "  https://custom.endpoint.com  ")).toBe("https://custom.endpoint.com");
   });
 
   it("run command fails when CRUISE_API_KEY is missing", () => {

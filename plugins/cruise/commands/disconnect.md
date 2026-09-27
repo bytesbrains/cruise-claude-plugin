@@ -7,6 +7,12 @@ disable-model-invocation: true
 
 Revert Claude Code back to direct Anthropic API / subscription routing by removing Cruise gateway settings.
 
+> **Stuck? Disconnect from a terminal.** Slash commands run through the active model, so if
+> that model is failing (for example `model_not_found` on `claude-opus-5-5[1m]`) or the Cruise
+> budget is exhausted, this command cannot run. Quit Claude Code and run
+> `npx @bytesbrains/claude-code-cruise disable` (add `--local` for a project-level setup)
+> instead. It needs no model, no network and no `CRUISE_API_KEY`.
+
 ## 1. Inspect `~/.claude/settings.json`
  
 If `--local` is specified, inspect and revert `./.claude/settings.json` in the current repository instead of `~/.claude/settings.json`.
@@ -26,8 +32,14 @@ Safely remove the Cruise gateway overrides while preserving all other user setti
    Within the `env` object of `~/.claude/settings.json`:
    - If `ANTHROPIC_BASE_URL` points to Cruise (`*bytesbrains*`), remove:
      - `ANTHROPIC_BASE_URL`
-     - `ANTHROPIC_MODEL` (if set to a Cruise lane like `bb/*` or pinned Cruise model)
-     - `ANTHROPIC_DEFAULT_HAIKU_MODEL` (if set to `bb/*`)
+     - Every model selector — `ANTHROPIC_MODEL`, `ANTHROPIC_DEFAULT_HAIKU_MODEL`,
+       `ANTHROPIC_DEFAULT_SONNET_MODEL`, `ANTHROPIC_DEFAULT_OPUS_MODEL`,
+       `ANTHROPIC_SMALL_FAST_MODEL`, `CLAUDE_CODE_SUBAGENT_MODEL` — set to a Cruise lane
+       (`bb/*`) or a pinned provider model (`provider/model`, e.g.
+       `google-ai-studio/gemini-3.8-flash`, `deepseek/deepseek-flash`). The Anthropic API rejects
+       these once native routing is back. Keep native Anthropic ids such as `claude-opus-5-5`,
+       and keep provider models when another gateway's `ANTHROPIC_BASE_URL` or
+       `CLAUDE_CODE_USE_BEDROCK` / `CLAUDE_CODE_USE_VERTEX` remains.
      - `CLAUDE_CODE_ATTRIBUTION_HEADER` (if set to `"0"`)
      - `CLAUDE_CODE_AUTO_MODE_SERVER` (if set to `"0"`)
      - `CLAUDE_CODE_MAX_CONTEXT_TOKENS` (if set to `"1000000"`)
@@ -54,3 +66,6 @@ Safely remove the Cruise gateway overrides while preserving all other user setti
 - Confirm that Cruise gateway configuration has been removed.
 - Remind the user to restart Claude Code (`quit` and reopen) to return to standard Anthropic routing.
 - Advise them to run `/status` after restart to verify native credentials and endpoints.
+- Mention that they can use Cruise again without touching `~/.claude/settings.json` by starting
+  `claude-cruise` (or `npx @bytesbrains/claude-code-cruise run`), which routes only that session
+  through Cruise.

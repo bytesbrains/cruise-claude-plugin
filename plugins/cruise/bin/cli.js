@@ -16,6 +16,29 @@ const SESSION_ID_REGEX = /^[A-Za-z0-9._:-]{1,128}$/;
 const DEFAULT_API_KEY_HELPER = 'printf %s "${CRUISE_API_KEY:-missing_cruise_key}"';
 const LEGACY_API_KEY_HELPER = 'printf %s "$CRUISE_API_KEY"';
 const DEFAULT_MAX_CONTEXT_TOKENS = "1000000";
+// Model selectors Claude Code reads from env. After disable, any of these left pointing at a
+// Cruise lane or a pinned provider model (`provider/model`) would fail on native routing (#38).
+const MODEL_ENV_KEYS = [
+  "ANTHROPIC_MODEL",
+  "ANTHROPIC_DEFAULT_HAIKU_MODEL",
+  "ANTHROPIC_DEFAULT_SONNET_MODEL",
+  "ANTHROPIC_DEFAULT_OPUS_MODEL",
+  "ANTHROPIC_SMALL_FAST_MODEL",
+  "CLAUDE_CODE_SUBAGENT_MODEL",
+];
+
+// True when a model id only resolves through Cruise (or another gateway): a `bb/` lane, a
+// Cruise-named id, or a provider-qualified id such as `google-ai-studio/gemini-3.8-flash`.
+// Native Anthropic ids (`claude-opus-5-5`, `claude-opus-5-5[1m]`) and Bedrock ARNs are not.
+function isGatewayModelId(modelId) {
+  if (typeof modelId !== "string" || modelId === "") {
+    return false;
+  }
+  if (modelId.startsWith("bb/") || modelId.includes("cruise")) {
+    return true;
+  }
+  return modelId.includes("/") && !modelId.startsWith("arn:");
+}
 
 function migrateSettings(settings) {
   if (!settings || typeof settings !== "object") {
@@ -471,21 +494,23 @@ function disable(options = {}) {
       removed.push("env.ANTHROPIC_BASE_URL");
       modified = true;
     }
-    if (
-      settings.env.ANTHROPIC_MODEL &&
-      (settings.env.ANTHROPIC_MODEL.startsWith("bb/") || settings.env.ANTHROPIC_MODEL.includes("cruise"))
-    ) {
-      delete settings.env.ANTHROPIC_MODEL;
-      removed.push("env.ANTHROPIC_MODEL");
-      modified = true;
-    }
-    if (
-      settings.env.ANTHROPIC_DEFAULT_HAIKU_MODEL &&
-      settings.env.ANTHROPIC_DEFAULT_HAIKU_MODEL.startsWith("bb/")
-    ) {
-      delete settings.env.ANTHROPIC_DEFAULT_HAIKU_MODEL;
-      removed.push("env.ANTHROPIC_DEFAULT_HAIKU_MODEL");
-      modified = true;
+    // Pinned provider models are only removed when native routing is what remains: another
+    // gateway (a non-Cruise ANTHROPIC_BASE_URL) or Bedrock/Vertex may legitimately use them.
+    const nativeRoutingRemains =
+      !settings.env.ANTHROPIC_BASE_URL &&
+      !settings.env.CLAUDE_CODE_USE_BEDROCK &&
+      !settings.env.CLAUDE_CODE_USE_VERTEX;
+    for (const key of MODEL_ENV_KEYS) {
+      const modelId = settings.env[key];
+      if (typeof modelId !== "string") {
+        continue;
+      }
+      const isCruiseLane = modelId.startsWith("bb/") || modelId.includes("cruise");
+      if (isCruiseLane || (nativeRoutingRemains && isGatewayModelId(modelId))) {
+        delete settings.env[key];
+        removed.push(`env.${key}`);
+        modified = true;
+      }
     }
     if (settings.env.CLAUDE_CODE_ATTRIBUTION_HEADER === "0") {
       delete settings.env.CLAUDE_CODE_ATTRIBUTION_HEADER;
@@ -744,10 +769,14 @@ Usage:
   npx @bytesbrains/claude-code-cruise <command> [options]
   claude-cruise [args...]
 
+If the active model fails inside Claude Code (so /cruise:disconnect cannot run),
+run "npx @bytesbrains/claude-code-cruise disable" from a terminal instead.
+
 Commands:
   run [args...]          Launch Claude Code child process with Cruise gateway environment
   enable                 Route Claude Code through Cruise LLM gateway and set up status line
-  disable                Safely remove Cruise gateway configuration from settings.json
+  disable                Safely remove Cruise gateway configuration (lanes, pinned provider
+                         models, headers, helper, status line) from settings.json
   status                 Inspect current Claude Code Cruise gateway configuration
   switch <model-or-lane> Switch active model or lane in settings.json
 
@@ -880,6 +909,8 @@ module.exports = {
   installStatusLine,
   getClaudeConfigDir,
   getSettingsPath,
+  isGatewayModelId,
+  MODEL_ENV_KEYS,
   KNOWN_PREFIXES,
   SESSION_ID_REGEX,
   DEFAULT_API_KEY_HELPER,

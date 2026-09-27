@@ -47,8 +47,18 @@ in its local catalog, triggering early auto-compaction and emitting warnings. Wh
   `deepseek/*`, `google-ai-studio/*`).
 - Switching to a model with a distinct context window in the Cruise catalogue (e.g. 2M for Gemini)
   dynamically updates `CLAUDE_CODE_MAX_CONTEXT_TOKENS` while preserving intentional user overrides.
+- Picking a **1M context** option in Claude Code 2.1+'s `/model` appends `[1m]` to the id
+  (`claude-opus-5-5[1m]`). Cruise does not know that suffix and answers `model_not_found`. Pick a
+  Cruise lane or pinned model instead (`/cruise:switch bb/agentic-coding`); the 1M window already
+  comes from `CLAUDE_CODE_MAX_CONTEXT_TOKENS`. Normalizing the suffix in the gateway is tracked
+  upstream in bytesbrains-cruise.
 
+## When a failing model locks you out
 
+Slash commands, `/cruise:disconnect` included, run through the active model. If that model is
+refused (`model_not_found`, `budget_exhausted`, `wallet_exhausted`), tell the user to quit Claude
+Code and run `npx @bytesbrains/claude-code-cruise disable` (or `switch <model>`) in a terminal.
+It edits `settings.json` offline and needs no model and no key.
 
 ## Reading a refusal
 

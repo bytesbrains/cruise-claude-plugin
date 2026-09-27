@@ -30,6 +30,8 @@ Safely remove the Cruise gateway overrides while preserving all other user setti
      - `ANTHROPIC_DEFAULT_HAIKU_MODEL` (if set to `bb/*`)
      - `CLAUDE_CODE_ATTRIBUTION_HEADER` (if set to `"0"`)
      - `CLAUDE_CODE_AUTO_MODE_SERVER` (if set to `"0"`)
+     - `CLAUDE_CODE_MAX_CONTEXT_TOKENS` (if set to `"1000000"`)
+     - `CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT` (if set to `"1"`)
    - **Clean Custom Headers (`ANTHROPIC_CUSTOM_HEADERS`)**:
      - Remove Cruise header lines (`x-cruise-class` and `x-cruise-session`).
      - If other custom headers remain (such as third-party proxy headers), preserve them. If no headers remain after removing Cruise headers, delete `ANTHROPIC_CUSTOM_HEADERS`.

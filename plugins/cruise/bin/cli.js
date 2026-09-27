@@ -15,6 +15,7 @@ const KNOWN_PREFIXES = ["cru_live_", "cru_test_", "cru_demo_", "cru_svc_"];
 const SESSION_ID_REGEX = /^[A-Za-z0-9._:-]{1,128}$/;
 const DEFAULT_API_KEY_HELPER = 'printf %s "${CRUISE_API_KEY:-missing_cruise_key}"';
 const LEGACY_API_KEY_HELPER = 'printf %s "$CRUISE_API_KEY"';
+const DEFAULT_MAX_CONTEXT_TOKENS = "1000000";
 
 function migrateSettings(settings) {
   if (!settings || typeof settings !== "object") {
@@ -215,6 +216,8 @@ function getCruiseEnv(options = {}) {
     ANTHROPIC_DEFAULT_HAIKU_MODEL: process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL || "bb/chat-assistant",
     CLAUDE_CODE_ATTRIBUTION_HEADER: "0",
     CLAUDE_CODE_AUTO_MODE_SERVER: "0",
+    CLAUDE_CODE_MAX_CONTEXT_TOKENS: process.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS || DEFAULT_MAX_CONTEXT_TOKENS,
+    CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT: "1",
     ANTHROPIC_CUSTOM_HEADERS: mergeCustomHeaders(
       process.env.ANTHROPIC_CUSTOM_HEADERS,
       requestedSessionId
@@ -350,6 +353,10 @@ function enable(options = {}) {
   settings.env.ANTHROPIC_DEFAULT_HAIKU_MODEL = "bb/chat-assistant";
   settings.env.CLAUDE_CODE_ATTRIBUTION_HEADER = "0";
   settings.env.CLAUDE_CODE_AUTO_MODE_SERVER = "0";
+  if (!settings.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS) {
+    settings.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS = DEFAULT_MAX_CONTEXT_TOKENS;
+  }
+  settings.env.CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT = "1";
   settings.env.ANTHROPIC_CUSTOM_HEADERS = mergeCustomHeaders(
     settings.env.ANTHROPIC_CUSTOM_HEADERS,
     requestedSessionId
@@ -463,6 +470,19 @@ function disable(options = {}) {
       removed.push("env.CLAUDE_CODE_AUTO_MODE_SERVER");
       modified = true;
     }
+    if (
+      settings.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS &&
+      (settings.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS === DEFAULT_MAX_CONTEXT_TOKENS || isCruiseConfigured)
+    ) {
+      delete settings.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS;
+      removed.push("env.CLAUDE_CODE_MAX_CONTEXT_TOKENS");
+      modified = true;
+    }
+    if (settings.env.CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT === "1") {
+      delete settings.env.CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT;
+      removed.push("env.CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT");
+      modified = true;
+    }
     if (settings.env.ANTHROPIC_CUSTOM_HEADERS) {
       const { cleaned, removedCruiseHeaders } = cleanCustomHeaders(settings.env.ANTHROPIC_CUSTOM_HEADERS);
       if (removedCruiseHeaders) {
@@ -557,6 +577,9 @@ function status(options = {}) {
   console.log(`  Base URL:     ${settings.env?.ANTHROPIC_BASE_URL || "(not set)"}`);
   console.log(`  Model:        ${settings.env?.ANTHROPIC_MODEL || "(default)"}`);
   console.log(`  Haiku Model:  ${settings.env?.ANTHROPIC_DEFAULT_HAIKU_MODEL || "(default)"}`);
+  if (settings.env?.CLAUDE_CODE_MAX_CONTEXT_TOKENS) {
+    console.log(`  Max Context:  ${settings.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS} tokens`);
+  }
   if (settings.env?.ANTHROPIC_CUSTOM_HEADERS) {
     const formattedHeaders = settings.env.ANTHROPIC_CUSTOM_HEADERS.replace(/\n/g, ", ");
     console.log(`  Headers:      ${formattedHeaders}`);
@@ -612,6 +635,7 @@ async function switchModel(targetModel, options = {}) {
   const apiKey = process.env.CRUISE_API_KEY;
   const baseUrl = detectBaseUrl(apiKey, process.env.CRUISE_BASE_URL || settings.env.ANTHROPIC_BASE_URL);
 
+  let modelContext = null;
   if (apiKey && !options.skipCheck && typeof fetch === "function") {
     try {
       const controller = new AbortController();
@@ -632,6 +656,10 @@ async function switchModel(targetModel, options = {}) {
             console.warn("   You may experience degraded or non-functional tool actions with this model.");
             console.warn("   Recommended agentic models: bb/agentic-coding, anthropic/claude-sonnet-5.\n");
           }
+          const rawContext = found.context_window || found["x-cruise"]?.context_window;
+          if (typeof rawContext === "number" && rawContext > 0) {
+            modelContext = rawContext;
+          }
         } else {
           console.warn(`\n⚠️  Notice: Model "${modelId}" was not found in the Cruise catalogue for this key.`);
           console.warn("   Updating settings anyway. Ensure the model ID is correct.\n");
@@ -644,6 +672,12 @@ async function switchModel(targetModel, options = {}) {
 
   const previousModel = settings.env.ANTHROPIC_MODEL;
   settings.env.ANTHROPIC_MODEL = modelId;
+  if (modelContext) {
+    settings.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS = String(modelContext);
+  } else if (!settings.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS) {
+    settings.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS = DEFAULT_MAX_CONTEXT_TOKENS;
+  }
+  settings.env.CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT = "1";
 
   fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + "\n", "utf8");
 
@@ -817,4 +851,5 @@ module.exports = {
   SESSION_ID_REGEX,
   DEFAULT_API_KEY_HELPER,
   LEGACY_API_KEY_HELPER,
+  DEFAULT_MAX_CONTEXT_TOKENS,
 };

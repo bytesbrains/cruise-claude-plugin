@@ -405,6 +405,8 @@ describe("the CLI bootstrapper", () => {
     expect(settings.env.ANTHROPIC_DEFAULT_HAIKU_MODEL).toBe("bb/chat-assistant");
     expect(settings.env.CLAUDE_CODE_ATTRIBUTION_HEADER).toBe("0");
     expect(settings.env.CLAUDE_CODE_AUTO_MODE_SERVER).toBe("0");
+    expect(settings.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS).toBe("1000000");
+    expect(settings.env.CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT).toBe("1");
     expect(settings.env.ANTHROPIC_CUSTOM_HEADERS).toMatch(/x-cruise-class: agentic/);
     expect(settings.env.ANTHROPIC_CUSTOM_HEADERS).toMatch(/x-cruise-session: claude-code-[A-Za-z0-9-]+/);
     expect(settings.apiKeyHelper).toBe(DEFAULT_API_KEY_HELPER);
@@ -551,6 +553,8 @@ describe("the CLI bootstrapper", () => {
     let settings = JSON.parse(readFileSync(settingsPath, "utf8"));
     expect(settings.env.ANTHROPIC_BASE_URL).toBe("https://cruise.bytesbrains.net");
     expect(settings.env.CLAUDE_CODE_AUTO_MODE_SERVER).toBe("0");
+    expect(settings.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS).toBe("1000000");
+    expect(settings.env.CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT).toBe("1");
 
     // Add extra user settings
     settings.customSetting = true;
@@ -567,6 +571,8 @@ describe("the CLI bootstrapper", () => {
     expect(cleaned.customSetting).toBe(true);
     expect(cleaned.env).toEqual({ CUSTOM_ENV: "stay" });
     expect(cleaned.env.CLAUDE_CODE_AUTO_MODE_SERVER).toBeUndefined();
+    expect(cleaned.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS).toBeUndefined();
+    expect(cleaned.env.CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT).toBeUndefined();
     expect(cleaned.apiKeyHelper).toBeUndefined();
     expect(cleaned.statusLine).toBeUndefined();
 
@@ -755,6 +761,8 @@ describe("the CLI bootstrapper", () => {
     expect(settings.env.ANTHROPIC_BASE_URL).toBe("https://cruise.bytesbrains.net");
     expect(settings.env.CLAUDE_CODE_ATTRIBUTION_HEADER).toBe("0");
     expect(settings.env.CLAUDE_CODE_AUTO_MODE_SERVER).toBe("0");
+    expect(settings.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS).toBe("1000000");
+    expect(settings.env.CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT).toBe("1");
   });
 
   it("switch does not warn when switching to non-Gemini models", () => {
@@ -814,6 +822,70 @@ describe("the CLI bootstrapper", () => {
     expect(settings.env.ANTHROPIC_MODEL).toBe("test/no-tools-model");
   });
 
+  it("switch updates CLAUDE_CODE_MAX_CONTEXT_TOKENS when model has context_window in catalogue", async () => {
+    const tmp = mkdtempSync(path.join(tmpdir(), "cruise-cli-test-"));
+    const settingsPath = path.join(tmp, "settings.json");
+
+    // Mock Cruise server returning a model with 2M context window
+    const server = createServer((_request, response) => {
+      response.setHeader("content-type", "application/json");
+      response.end(
+        JSON.stringify({
+          data: [
+            {
+              id: "google-ai-studio/gemini-2.5-pro",
+              context_window: 2000000,
+              "x-cruise": { tools: true },
+            },
+          ],
+        }),
+      );
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const { port } = server.address() as { port: number };
+
+    const child = spawn(process.execPath, [cli, "switch", "google-ai-studio/gemini-2.5-pro"], {
+      env: {
+        PATH: process.env.PATH ?? "",
+        CLAUDE_CONFIG_DIR: tmp,
+        CRUISE_API_KEY: LIVE_KEY,
+        CRUISE_BASE_URL: `http://127.0.0.1:${port}`,
+      },
+    });
+
+    const exitCode = await new Promise<number | null>((resolve) => {
+      child.on("close", resolve);
+    });
+    server.close();
+
+    expect(exitCode).toBe(0);
+    const settings = JSON.parse(readFileSync(settingsPath, "utf8"));
+    expect(settings.env.ANTHROPIC_MODEL).toBe("google-ai-studio/gemini-2.5-pro");
+    expect(settings.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS).toBe("2000000");
+    expect(settings.env.CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT).toBe("1");
+  });
+
+  it("enable preserves pre-existing custom CLAUDE_CODE_MAX_CONTEXT_TOKENS", () => {
+    const tmp = mkdtempSync(path.join(tmpdir(), "cruise-cli-test-"));
+    const settingsPath = path.join(tmp, "settings.json");
+
+    writeFileSync(
+      settingsPath,
+      JSON.stringify({
+        env: {
+          CLAUDE_CODE_MAX_CONTEXT_TOKENS: "500000",
+        },
+      }),
+    );
+
+    const out = runCli(["enable"], { CLAUDE_CONFIG_DIR: tmp, CRUISE_API_KEY: LIVE_KEY });
+    expect(out.status).toBe(0);
+
+    const settings = JSON.parse(readFileSync(settingsPath, "utf8"));
+    expect(settings.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS).toBe("500000");
+    expect(settings.env.CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT).toBe("1");
+  });
+
   it("getCruiseEnv returns all required gateway variables when CRUISE_API_KEY is valid", () => {
     const originalKey = process.env.CRUISE_API_KEY;
     try {
@@ -825,6 +897,8 @@ describe("the CLI bootstrapper", () => {
       expect(res.env.ANTHROPIC_DEFAULT_HAIKU_MODEL).toBe("bb/chat-assistant");
       expect(res.env.CLAUDE_CODE_ATTRIBUTION_HEADER).toBe("0");
       expect(res.env.CLAUDE_CODE_AUTO_MODE_SERVER).toBe("0");
+      expect(res.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS).toBe("1000000");
+      expect(res.env.CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT).toBe("1");
       expect(res.env.ANTHROPIC_CUSTOM_HEADERS).toMatch(/x-cruise-class: agentic/);
       expect(res.env.ANTHROPIC_CUSTOM_HEADERS).toMatch(/x-cruise-session: claude-code-/);
       expect(res.env.ANTHROPIC_AUTH_TOKEN).toBe(LIVE_KEY);
@@ -882,6 +956,8 @@ console.log("MODEL:" + process.env.ANTHROPIC_MODEL);
 console.log("AUTH_TOKEN:" + process.env.ANTHROPIC_AUTH_TOKEN);
 console.log("AUTO_MODE_SERVER:" + process.env.CLAUDE_CODE_AUTO_MODE_SERVER);
 console.log("ATTRIBUTION_HEADER:" + process.env.CLAUDE_CODE_ATTRIBUTION_HEADER);
+console.log("MAX_CONTEXT_TOKENS:" + process.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS);
+console.log("DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT:" + process.env.CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT);
 console.log("CUSTOM_HEADERS:" + process.env.ANTHROPIC_CUSTOM_HEADERS.replace(/\\n/g, ", "));
 `,
       { mode: 0o755 }
@@ -901,6 +977,8 @@ console.log("CUSTOM_HEADERS:" + process.env.ANTHROPIC_CUSTOM_HEADERS.replace(/\\
     expect(out.stdout).toMatch(new RegExp(`AUTH_TOKEN:${LIVE_KEY}`));
     expect(out.stdout).toMatch(/AUTO_MODE_SERVER:0/);
     expect(out.stdout).toMatch(/ATTRIBUTION_HEADER:0/);
+    expect(out.stdout).toMatch(/MAX_CONTEXT_TOKENS:1000000/);
+    expect(out.stdout).toMatch(/DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT:1/);
     expect(out.stdout).toMatch(/CUSTOM_HEADERS:.*x-cruise-class: agentic/);
 
     // Global settings file must NOT exist or be modified

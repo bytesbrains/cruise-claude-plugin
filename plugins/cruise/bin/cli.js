@@ -21,11 +21,33 @@ function migrateSettings(settings) {
   if (!settings || typeof settings !== "object") {
     return false;
   }
+  let modified = false;
   if (settings.apiKeyHelper === LEGACY_API_KEY_HELPER) {
     settings.apiKeyHelper = DEFAULT_API_KEY_HELPER;
-    return true;
+    modified = true;
   }
-  return false;
+
+  const isCruiseConfigured = Boolean(
+    (settings.env?.ANTHROPIC_BASE_URL &&
+      (settings.env.ANTHROPIC_BASE_URL.includes("bytesbrains") ||
+        settings.env.ANTHROPIC_BASE_URL.includes("cruise"))) ||
+    (settings.apiKeyHelper && settings.apiKeyHelper.includes("CRUISE_API_KEY")) ||
+    (settings.env?.ANTHROPIC_CUSTOM_HEADERS &&
+      settings.env.ANTHROPIC_CUSTOM_HEADERS.includes("x-cruise-"))
+  );
+
+  if (isCruiseConfigured && settings.env && typeof settings.env === "object" && !Array.isArray(settings.env)) {
+    if (!settings.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS) {
+      settings.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS = DEFAULT_MAX_CONTEXT_TOKENS;
+      modified = true;
+    }
+    if (settings.env.CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT === undefined) {
+      settings.env.CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT = "1";
+      modified = true;
+    }
+  }
+
+  return modified;
 }
 
 function validateSessionId(sessionId) {
@@ -217,7 +239,10 @@ function getCruiseEnv(options = {}) {
     CLAUDE_CODE_ATTRIBUTION_HEADER: "0",
     CLAUDE_CODE_AUTO_MODE_SERVER: "0",
     CLAUDE_CODE_MAX_CONTEXT_TOKENS: process.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS || DEFAULT_MAX_CONTEXT_TOKENS,
-    CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT: "1",
+    CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT:
+      process.env.CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT !== undefined
+        ? process.env.CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT
+        : "1",
     ANTHROPIC_CUSTOM_HEADERS: mergeCustomHeaders(
       process.env.ANTHROPIC_CUSTOM_HEADERS,
       requestedSessionId
@@ -356,7 +381,9 @@ function enable(options = {}) {
   if (!settings.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS) {
     settings.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS = DEFAULT_MAX_CONTEXT_TOKENS;
   }
-  settings.env.CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT = "1";
+  if (settings.env.CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT === undefined) {
+    settings.env.CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT = "1";
+  }
   settings.env.ANTHROPIC_CUSTOM_HEADERS = mergeCustomHeaders(
     settings.env.ANTHROPIC_CUSTOM_HEADERS,
     requestedSessionId
@@ -472,7 +499,7 @@ function disable(options = {}) {
     }
     if (
       settings.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS &&
-      (settings.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS === DEFAULT_MAX_CONTEXT_TOKENS || isCruiseConfigured)
+      String(settings.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS) === DEFAULT_MAX_CONTEXT_TOKENS
     ) {
       delete settings.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS;
       removed.push("env.CLAUDE_CODE_MAX_CONTEXT_TOKENS");
@@ -672,12 +699,18 @@ async function switchModel(targetModel, options = {}) {
 
   const previousModel = settings.env.ANTHROPIC_MODEL;
   settings.env.ANTHROPIC_MODEL = modelId;
-  if (modelContext) {
+  const isCustomMaxContext =
+    Boolean(settings.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS) &&
+    String(settings.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS) !== DEFAULT_MAX_CONTEXT_TOKENS;
+
+  if (modelContext && !isCustomMaxContext) {
     settings.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS = String(modelContext);
   } else if (!settings.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS) {
     settings.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS = DEFAULT_MAX_CONTEXT_TOKENS;
   }
-  settings.env.CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT = "1";
+  if (settings.env.CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT === undefined) {
+    settings.env.CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT = "1";
+  }
 
   fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + "\n", "utf8");
 

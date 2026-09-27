@@ -632,6 +632,34 @@ describe("the CLI bootstrapper", () => {
     expect(migrateSettings(null)).toBe(false);
   });
 
+  it("migrateSettings adds missing context window configuration to existing Cruise settings", () => {
+    const cruiseConfig: Record<string, any> = {
+      env: {
+        ANTHROPIC_BASE_URL: "https://cruise.bytesbrains.net",
+        ANTHROPIC_MODEL: "bb/agentic-coding",
+      },
+    };
+    expect(migrateSettings(cruiseConfig)).toBe(true);
+    expect(cruiseConfig.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS).toBe("1000000");
+    expect(cruiseConfig.env.CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT).toBe("1");
+
+    // Re-running on already migrated settings is a no-op
+    expect(migrateSettings(cruiseConfig)).toBe(false);
+  });
+
+  it("migrateSettings preserves pre-existing custom context configuration", () => {
+    const customConfig = {
+      env: {
+        ANTHROPIC_BASE_URL: "https://cruise.bytesbrains.net",
+        CLAUDE_CODE_MAX_CONTEXT_TOKENS: "500000",
+        CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT: "0",
+      },
+    };
+    expect(migrateSettings(customConfig)).toBe(false);
+    expect(customConfig.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS).toBe("500000");
+    expect(customConfig.env.CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT).toBe("0");
+  });
+
   it("status auto-migrates legacy apiKeyHelper and reports notice", () => {
     const tmp = mkdtempSync(path.join(tmpdir(), "cruise-cli-test-"));
     const settingsPath = path.join(tmp, "settings.json");
@@ -884,6 +912,125 @@ describe("the CLI bootstrapper", () => {
     const settings = JSON.parse(readFileSync(settingsPath, "utf8"));
     expect(settings.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS).toBe("500000");
     expect(settings.env.CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT).toBe("1");
+  });
+
+  it("enable preserves pre-existing custom CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT", () => {
+    const tmp = mkdtempSync(path.join(tmpdir(), "cruise-cli-test-"));
+    const settingsPath = path.join(tmp, "settings.json");
+
+    writeFileSync(
+      settingsPath,
+      JSON.stringify({
+        env: {
+          CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT: "0",
+        },
+      }),
+    );
+
+    const out = runCli(["enable"], { CLAUDE_CONFIG_DIR: tmp, CRUISE_API_KEY: LIVE_KEY });
+    expect(out.status).toBe(0);
+
+    const settings = JSON.parse(readFileSync(settingsPath, "utf8"));
+    expect(settings.env.CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT).toBe("0");
+  });
+
+  it("disable preserves pre-existing custom CLAUDE_CODE_MAX_CONTEXT_TOKENS and custom disable-enforcement", () => {
+    const tmp = mkdtempSync(path.join(tmpdir(), "cruise-cli-test-"));
+    const settingsPath = path.join(tmp, "settings.json");
+
+    // Enable with custom settings
+    writeFileSync(
+      settingsPath,
+      JSON.stringify({
+        env: {
+          CLAUDE_CODE_MAX_CONTEXT_TOKENS: "500000",
+          CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT: "0",
+        },
+      }),
+    );
+
+    runCli(["enable"], { CLAUDE_CONFIG_DIR: tmp, CRUISE_API_KEY: LIVE_KEY });
+    const enabled = JSON.parse(readFileSync(settingsPath, "utf8"));
+    expect(enabled.env.ANTHROPIC_BASE_URL).toBe("https://cruise.bytesbrains.net");
+    expect(enabled.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS).toBe("500000");
+    expect(enabled.env.CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT).toBe("0");
+
+    // Disable
+    const disableOut = runCli(["disable"], { CLAUDE_CONFIG_DIR: tmp });
+    expect(disableOut.status).toBe(0);
+
+    const cleaned = JSON.parse(readFileSync(settingsPath, "utf8"));
+    expect(cleaned.env.ANTHROPIC_BASE_URL).toBeUndefined();
+    expect(cleaned.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS).toBe("500000");
+    expect(cleaned.env.CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT).toBe("0");
+  });
+
+  it("switch preserves pre-existing custom CLAUDE_CODE_MAX_CONTEXT_TOKENS", async () => {
+    const tmp = mkdtempSync(path.join(tmpdir(), "cruise-cli-test-"));
+    const settingsPath = path.join(tmp, "settings.json");
+
+    writeFileSync(
+      settingsPath,
+      JSON.stringify({
+        env: {
+          CLAUDE_CODE_MAX_CONTEXT_TOKENS: "500000",
+        },
+      }),
+    );
+
+    // Mock Cruise server returning a model with 2M context window
+    const server = createServer((_request, response) => {
+      response.setHeader("content-type", "application/json");
+      response.end(
+        JSON.stringify({
+          data: [
+            {
+              id: "google-ai-studio/gemini-2.5-pro",
+              context_window: 2000000,
+              "x-cruise": { tools: true },
+            },
+          ],
+        }),
+      );
+    });
+    await new Promise<void>((resolve) => server.listen(0, "127.0.0.1", resolve));
+    const { port } = server.address() as { port: number };
+
+    const child = spawn(process.execPath, [cli, "switch", "google-ai-studio/gemini-2.5-pro"], {
+      env: {
+        PATH: process.env.PATH ?? "",
+        CLAUDE_CONFIG_DIR: tmp,
+        CRUISE_API_KEY: LIVE_KEY,
+        CRUISE_BASE_URL: `http://127.0.0.1:${port}`,
+      },
+    });
+
+    const exitCode = await new Promise<number | null>((resolve) => {
+      child.on("close", resolve);
+    });
+    server.close();
+
+    expect(exitCode).toBe(0);
+    const settings = JSON.parse(readFileSync(settingsPath, "utf8"));
+    expect(settings.env.ANTHROPIC_MODEL).toBe("google-ai-studio/gemini-2.5-pro");
+    expect(settings.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS).toBe("500000");
+  });
+
+  it("getCruiseEnv preserves existing CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT from environment", () => {
+    const origKey = process.env.CRUISE_API_KEY;
+    const origEnforce = process.env.CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT;
+    try {
+      process.env.CRUISE_API_KEY = LIVE_KEY;
+      process.env.CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT = "0";
+      const res = getCruiseEnv();
+      expect(res.valid).toBe(true);
+      expect(res.env.CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT).toBe("0");
+    } finally {
+      if (origKey === undefined) delete process.env.CRUISE_API_KEY;
+      else process.env.CRUISE_API_KEY = origKey;
+      if (origEnforce === undefined) delete process.env.CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT;
+      else process.env.CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT = origEnforce;
+    }
   });
 
   it("getCruiseEnv returns all required gateway variables when CRUISE_API_KEY is valid", () => {

@@ -56,6 +56,11 @@ npx @bytesbrains/claude-code-cruise switch bb/agentic-coding
 npx @bytesbrains/claude-code-cruise disable
 ```
 
+To keep your Anthropic subscription as the default, leave `~/.claude/settings.json` alone: run
+`claude` for the subscription and `claude-cruise` for a session routed through Cruise. Use
+`enable --local` for repositories that should always use Cruise. If the active model fails and
+`/cruise:disconnect` cannot run, `disable` works from any terminal with no model and no key.
+
 ## What is inside
 
 - **CLI `claude-code-cruise` / `claude-cruise`**: standalone bootstrapper and on-demand launcher (`claude-cruise`, `run`, `enable`, `disable`, `switch`) for zero-dependency execution and project-level (`--local`) scope.

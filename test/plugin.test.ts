@@ -26,6 +26,8 @@ const {
   detectBaseUrl,
   getCruiseEnv,
   runClaude,
+  isCruiseModelId,
+  isGatewayModelId,
 } = require(CLI);
 const json = (file: string) => JSON.parse(readFileSync(path.join(ROOT, file), "utf8")) as Record<string, any>;
 
@@ -963,6 +965,127 @@ describe("the CLI bootstrapper", () => {
     expect(cleaned.env.ANTHROPIC_BASE_URL).toBeUndefined();
     expect(cleaned.env.CLAUDE_CODE_MAX_CONTEXT_TOKENS).toBe("500000");
     expect(cleaned.env.CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT).toBe("0");
+  });
+
+  it("disable removes pinned provider models so native routing does not fail (#38)", () => {
+    const tmp = mkdtempSync(path.join(tmpdir(), "cruise-cli-test-"));
+    const settingsPath = path.join(tmp, "settings.json");
+
+    runCli(["enable"], { CLAUDE_CONFIG_DIR: tmp, CRUISE_API_KEY: LIVE_KEY });
+    const settings = JSON.parse(readFileSync(settingsPath, "utf8"));
+    settings.env.ANTHROPIC_MODEL = "google-ai-studio/gemini-3.8-flash";
+    settings.env.ANTHROPIC_DEFAULT_SONNET_MODEL = "deepseek/deepseek-flash";
+    settings.env.CLAUDE_CODE_SUBAGENT_MODEL = "anthropic/claude-sonnet-5";
+    settings.env.ANTHROPIC_DEFAULT_OPUS_MODEL = "claude-opus-5-5[1m]";
+    writeFileSync(settingsPath, JSON.stringify(settings, null, 2));
+
+    const disableOut = runCli(["disable"], { CLAUDE_CONFIG_DIR: tmp });
+    expect(disableOut.status).toBe(0);
+    expect(disableOut.stdout).toMatch(/env\.ANTHROPIC_MODEL/);
+
+    const cleaned = JSON.parse(readFileSync(settingsPath, "utf8"));
+    // A native Anthropic id is left alone; everything Cruise-only is gone.
+    expect(cleaned.env).toEqual({ ANTHROPIC_DEFAULT_OPUS_MODEL: "claude-opus-5-5[1m]" });
+    expect(cleaned.apiKeyHelper).toBeUndefined();
+  });
+
+  it("disable removes an orphaned pinned model left without other Cruise settings", () => {
+    const tmp = mkdtempSync(path.join(tmpdir(), "cruise-cli-test-"));
+    const settingsPath = path.join(tmp, "settings.json");
+    writeFileSync(settingsPath, JSON.stringify({ env: { ANTHROPIC_MODEL: "mistral/devstral-2", FOO: "bar" } }));
+
+    const disableOut = runCli(["disable"], { CLAUDE_CONFIG_DIR: tmp });
+    expect(disableOut.status).toBe(0);
+    expect(JSON.parse(readFileSync(settingsPath, "utf8")).env).toEqual({ FOO: "bar" });
+  });
+
+  it("disable keeps provider models that another gateway or Bedrock still routes", () => {
+    const tmp = mkdtempSync(path.join(tmpdir(), "cruise-cli-test-"));
+    const settingsPath = path.join(tmp, "settings.json");
+    const otherGateway = {
+      env: { ANTHROPIC_BASE_URL: "https://litellm.example.com", ANTHROPIC_MODEL: "openai/gpt-6" },
+    };
+    writeFileSync(settingsPath, JSON.stringify(otherGateway));
+    expect(runCli(["disable"], { CLAUDE_CONFIG_DIR: tmp }).status).toBe(0);
+    expect(JSON.parse(readFileSync(settingsPath, "utf8"))).toEqual(otherGateway);
+
+    const bedrockArn = "arn:aws:bedrock:us-east-1:123456789012:inference-profile/us.anthropic.claude-sonnet-5";
+    const bedrock = { env: { CLAUDE_CODE_USE_BEDROCK: "1", ANTHROPIC_MODEL: bedrockArn } };
+    writeFileSync(settingsPath, JSON.stringify(bedrock));
+    expect(runCli(["disable"], { CLAUDE_CONFIG_DIR: tmp }).status).toBe(0);
+    expect(JSON.parse(readFileSync(settingsPath, "utf8"))).toEqual(bedrock);
+  });
+
+  it("disable treats Bedrock/Vertex flags set to 0 or false as native routing", () => {
+    const tmp = mkdtempSync(path.join(tmpdir(), "cruise-cli-test-"));
+    const settingsPath = path.join(tmp, "settings.json");
+    for (const flag of ["0", "false", "FALSE", ""]) {
+      writeFileSync(
+        settingsPath,
+        JSON.stringify({
+          env: { CLAUDE_CODE_USE_BEDROCK: flag, CLAUDE_CODE_USE_VERTEX: "0", ANTHROPIC_MODEL: "deepseek/deepseek-flash" },
+        }),
+      );
+      expect(runCli(["disable"], { CLAUDE_CONFIG_DIR: tmp }).status).toBe(0);
+      expect(JSON.parse(readFileSync(settingsPath, "utf8")).env).toEqual({
+        CLAUDE_CODE_USE_BEDROCK: flag,
+        CLAUDE_CODE_USE_VERTEX: "0",
+      });
+    }
+
+    // A positive flag in any of Claude Code's accepted spellings keeps the provider model.
+    for (const flag of ["1", "true", "Yes", "on"]) {
+      const vertex = { env: { CLAUDE_CODE_USE_VERTEX: flag, ANTHROPIC_MODEL: "publishers/anthropic/claude-sonnet-5" } };
+      writeFileSync(settingsPath, JSON.stringify(vertex));
+      expect(runCli(["disable"], { CLAUDE_CONFIG_DIR: tmp }).status).toBe(0);
+      expect(JSON.parse(readFileSync(settingsPath, "utf8"))).toEqual(vertex);
+    }
+  });
+
+  it("disable removes bb-adm/ lanes like bb/ lanes", () => {
+    const tmp = mkdtempSync(path.join(tmpdir(), "cruise-cli-test-"));
+    const settingsPath = path.join(tmp, "settings.json");
+
+    // Bedrock stays on, so provider ids are kept — but a Cruise lane never resolves there.
+    const arn = "arn:aws:bedrock:us-east-1:123456789012:inference-profile/us.anthropic.claude-sonnet-5";
+    writeFileSync(
+      settingsPath,
+      JSON.stringify({
+        env: {
+          CLAUDE_CODE_USE_BEDROCK: "1",
+          ANTHROPIC_MODEL: "bb-adm/code-review",
+          CLAUDE_CODE_SUBAGENT_MODEL: "bb/agentic-coding",
+          ANTHROPIC_DEFAULT_SONNET_MODEL: arn,
+        },
+      }),
+    );
+    expect(runCli(["disable"], { CLAUDE_CONFIG_DIR: tmp }).status).toBe(0);
+    expect(JSON.parse(readFileSync(settingsPath, "utf8")).env).toEqual({
+      CLAUDE_CODE_USE_BEDROCK: "1",
+      ANTHROPIC_DEFAULT_SONNET_MODEL: arn,
+    });
+
+    // A self-hosted Cruise URL is recognised through the bb-adm/ lane pinned alongside it.
+    writeFileSync(
+      settingsPath,
+      JSON.stringify({ env: { ANTHROPIC_BASE_URL: "https://llm.internal.example", ANTHROPIC_MODEL: "bb-adm/code-review" } }),
+    );
+    expect(runCli(["disable"], { CLAUDE_CONFIG_DIR: tmp }).status).toBe(0);
+    expect(JSON.parse(readFileSync(settingsPath, "utf8")).env).toBeUndefined();
+  });
+
+  it("isCruiseModelId recognises both lane namespaces and nothing native", () => {
+    expect(isCruiseModelId("bb/agentic-coding")).toBe(true);
+    expect(isCruiseModelId("bb-adm/security-code-audit")).toBe(true);
+    expect(isCruiseModelId("my-cruise-model")).toBe(true);
+    expect(isCruiseModelId("claude-opus-5-5[1m]")).toBe(false);
+    expect(isCruiseModelId("deepseek/deepseek-flash")).toBe(false);
+    expect(isCruiseModelId(undefined)).toBe(false);
+    expect(isGatewayModelId("bb-adm/code-review")).toBe(true);
+  });
+
+  it("help points to the offline disable when /cruise:disconnect cannot run", () => {
+    expect(runCli(["--help"]).stdout).toMatch(/\/cruise:disconnect cannot run/);
   });
 
   it("switch preserves pre-existing custom CLAUDE_CODE_MAX_CONTEXT_TOKENS", async () => {

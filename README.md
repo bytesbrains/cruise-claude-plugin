@@ -74,6 +74,19 @@ npx @bytesbrains/claude-code-cruise status
 npx @bytesbrains/claude-code-cruise disable
 ```
 
+### Switching between Cruise and your Claude subscription
+
+| Mode | How | When |
+|---|---|---|
+| **Dual-command (recommended)** | Keep `~/.claude/settings.json` on your subscription. Run `claude` for the subscription and `claude-cruise` (or `npx @bytesbrains/claude-code-cruise run`) for a Cruise session. Nothing is written to disk | You switch often, or want no chance of lockout |
+| **Per project** | `npx @bytesbrains/claude-code-cruise enable --local` (or `/cruise:connect --local`) writes `./.claude/settings.json` | A repository that should always use Cruise |
+| **Global** | `/cruise:connect` or `npx @bytesbrains/claude-code-cruise enable` | Cruise for every session |
+
+Slash commands run through the active model. If that model fails, `/cruise:disconnect` cannot
+run either: quit Claude Code and run `npx @bytesbrains/claude-code-cruise disable`. It removes
+Cruise lanes and pinned provider models (`provider/model`) from every model setting, so native
+routing starts clean.
+
 ## What is inside
 
 | | |
@@ -122,6 +135,7 @@ The tools read only your key's own project and never change anything.
 | Status line: `Cruise: no answer from <url>` | Cruise did not answer within three seconds, or answered with something else | Check the URL. The line retries after its one-minute cache |
 | A request refused with `budget_exhausted` | The project's cap for this period is spent | Wait for the period to reset, or raise the cap |
 | A request refused with `wallet_exhausted` | The account is out of credit. Waiting does not help | Top up the wallet |
+| `There's an issue with the selected model (claude-opus-5-5[1m])`, even from `/cruise:disconnect` | `/model`'s 1M context option appends `[1m]`, which Cruise answers with `model_not_found`. Slash commands use the same model, so they fail too | Quit Claude Code and run `npx @bytesbrains/claude-code-cruise disable` (or `switch bb/agentic-coding`) in a terminal. Pick a Cruise lane in `/model`, not a 1M option |
 | HTTP 400: `Function call is missing a thought_signature in functionCall parts` | Google Gemini models with thinking enabled fail multi-turn tool calling in Claude Code ([bytesbrains-cruise#543](https://github.com/bytesbrains/bytesbrains-cruise/issues/543)) | Switch to `bb/agentic-coding` or `anthropic/claude-sonnet-5` (via `/cruise:switch bb/agentic-coding` or `npx @bytesbrains/claude-code-cruise switch bb/agentic-coding`), or run `/clear` to reset conversation context |
 | Claude Code warning: `"<model>" isn't described by this version's model catalog` | Claude Code restricts uncataloged models to 200k tokens by default | Cruise automatically sets `CLAUDE_CODE_MAX_CONTEXT_TOKENS=1000000` and `CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT=1` to guarantee a 1M token context window for agentic coding and silence the warning |
 

@@ -27,17 +27,34 @@ const MODEL_ENV_KEYS = [
   "CLAUDE_CODE_SUBAGENT_MODEL",
 ];
 
-// True when a model id only resolves through Cruise (or another gateway): a `bb/` lane, a
-// Cruise-named id, or a provider-qualified id such as `google-ai-studio/gemini-3.8-flash`.
+// Cruise lane namespaces: `bb/` for public lanes, `bb-adm/` for admin-provisioned ones.
+const CRUISE_LANE_PREFIXES = ["bb/", "bb-adm/"];
+
+// True when a model id only resolves through Cruise itself: a Cruise lane or a Cruise-named id.
+function isCruiseModelId(modelId) {
+  if (typeof modelId !== "string" || modelId === "") {
+    return false;
+  }
+  return CRUISE_LANE_PREFIXES.some((prefix) => modelId.startsWith(prefix)) || modelId.includes("cruise");
+}
+
+// True when a model id only resolves through Cruise (or another gateway): a Cruise id, or a
+// provider-qualified id such as `google-ai-studio/gemini-3.8-flash`.
 // Native Anthropic ids (`claude-opus-5-5`, `claude-opus-5-5[1m]`) and Bedrock ARNs are not.
 function isGatewayModelId(modelId) {
   if (typeof modelId !== "string" || modelId === "") {
     return false;
   }
-  if (modelId.startsWith("bb/") || modelId.includes("cruise")) {
+  if (isCruiseModelId(modelId)) {
     return true;
   }
   return modelId.includes("/") && !modelId.startsWith("arn:");
+}
+
+// Mirrors Claude Code's own env flag parsing: only these values switch a flag on, so
+// `CLAUDE_CODE_USE_BEDROCK=0` or `=false` leaves routing native.
+function isEnvFlagOn(value) {
+  return ["1", "true", "yes", "on"].includes(String(value ?? "").trim().toLowerCase());
 }
 
 function migrateSettings(settings) {
@@ -476,7 +493,7 @@ function disable(options = {}) {
     (settings.env && (
       (settings.env.ANTHROPIC_BASE_URL && (settings.env.ANTHROPIC_BASE_URL.includes("bytesbrains") || settings.env.ANTHROPIC_BASE_URL.includes("cruise"))) ||
       settings.env.ANTHROPIC_DEFAULT_HAIKU_MODEL === "bb/chat-assistant" ||
-      (settings.env.ANTHROPIC_MODEL && (settings.env.ANTHROPIC_MODEL.startsWith("bb/") || settings.env.ANTHROPIC_MODEL.includes("cruise"))) ||
+      isCruiseModelId(settings.env.ANTHROPIC_MODEL) ||
       (settings.env.ANTHROPIC_CUSTOM_HEADERS && settings.env.ANTHROPIC_CUSTOM_HEADERS.includes("x-cruise-")) ||
       settings.env.CLAUDE_CODE_AUTO_MODE_SERVER === "0"
     ))
@@ -498,15 +515,14 @@ function disable(options = {}) {
     // gateway (a non-Cruise ANTHROPIC_BASE_URL) or Bedrock/Vertex may legitimately use them.
     const nativeRoutingRemains =
       !settings.env.ANTHROPIC_BASE_URL &&
-      !settings.env.CLAUDE_CODE_USE_BEDROCK &&
-      !settings.env.CLAUDE_CODE_USE_VERTEX;
+      !isEnvFlagOn(settings.env.CLAUDE_CODE_USE_BEDROCK) &&
+      !isEnvFlagOn(settings.env.CLAUDE_CODE_USE_VERTEX);
     for (const key of MODEL_ENV_KEYS) {
       const modelId = settings.env[key];
       if (typeof modelId !== "string") {
         continue;
       }
-      const isCruiseLane = modelId.startsWith("bb/") || modelId.includes("cruise");
-      if (isCruiseLane || (nativeRoutingRemains && isGatewayModelId(modelId))) {
+      if (isCruiseModelId(modelId) || (nativeRoutingRemains && isGatewayModelId(modelId))) {
         delete settings.env[key];
         removed.push(`env.${key}`);
         modified = true;
@@ -910,6 +926,8 @@ module.exports = {
   getClaudeConfigDir,
   getSettingsPath,
   isGatewayModelId,
+  isCruiseModelId,
+  isEnvFlagOn,
   MODEL_ENV_KEYS,
   KNOWN_PREFIXES,
   SESSION_ID_REGEX,

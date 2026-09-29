@@ -38,6 +38,9 @@ function handle(input) {
     ok = disable({
       local: request.local,
       cwd: input.cwd || process.cwd(),
+      // This process carries the session's env as it was before disable edited the files, so
+      // it would report what was just removed. Only the files are checked.
+      shellEnv: {},
       log: (line) => lines.push(line),
       logError: (line) => lines.push(line),
     });

@@ -33,6 +33,7 @@ const EXPECTED = [
   "commands/update.md",
   "hooks/disconnect.js",
   "hooks/hooks.json",
+  "hooks/session-start.js",
   "package.json",
   "scripts/statusline.sh",
   "skills/cruise/SKILL.md",

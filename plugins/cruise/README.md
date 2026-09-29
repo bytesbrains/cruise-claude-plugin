@@ -72,7 +72,8 @@ turned off, `disable` does the same from any terminal with no model and no key.
 - **Command `/cruise:models`**: list reachable models and lanes with pricing and active selection.
 - **Command `/cruise:status`**: inspect current project budget limits, wallet balance, and serve/refuse status (`/cruise:budget`).
 - **Command `/cruise:spend`**: view monthly ledger spend breakdown by lane and by model (`/cruise:spend [month]`).
-- **Command `/cruise:switch`**: switch Claude Code's active model or lane in `~/.claude/settings.json`.
+- **Command `/cruise:switch`**: switch Claude Code's active model or lane in `~/.claude/settings.json`. It refuses a lane or provider model while Cruise routing is off.
+- **Session start check**: a `SessionStart` hook that warns, without calling a model, when a model setting names a lane or provider model but no gateway is configured, and says where it is set.
 - **Command `/cruise:update`**: update the Cruise plugin to the latest release and refresh the status line script.
 - **Skill `cruise`**: choosing a lane or a pinned model, and what each Cruise refusal means.
 - **Skill `/cruise:setup`**: guided setup. It runs only when you invoke it, and asks before it

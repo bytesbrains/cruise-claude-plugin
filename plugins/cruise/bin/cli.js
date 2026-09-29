@@ -274,7 +274,7 @@ function getCruiseEnv(options = {}) {
   const env = {
     ...process.env,
     ANTHROPIC_BASE_URL: baseUrl,
-    ANTHROPIC_MODEL: process.env.ANTHROPIC_MODEL || options.model || "bb/agentic-coding",
+    ANTHROPIC_MODEL: options.model || process.env.ANTHROPIC_MODEL || "bb/agentic-coding",
     ANTHROPIC_DEFAULT_HAIKU_MODEL: process.env.ANTHROPIC_DEFAULT_HAIKU_MODEL || "bb/chat-assistant",
     CLAUDE_CODE_ATTRIBUTION_HEADER: "0",
     CLAUDE_CODE_AUTO_MODE_SERVER: "0",

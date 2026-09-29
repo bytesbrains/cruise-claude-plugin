@@ -120,7 +120,7 @@ replacing it:
 ```
 
 It shows the project's spend for its budget period and whether the next request is served,
-refreshed at most once a minute. Tell the user to run `/cruise:setup` again after a plugin
+refreshed at most once a minute. Tell the user to run `/cruise:update` after a plugin
 update to refresh the copy.
 
 ## 5. Finish

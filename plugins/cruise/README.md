@@ -72,6 +72,7 @@ To keep your Anthropic subscription as the default, leave `~/.claude/settings.js
 - **Command `/cruise:status`**: inspect current project budget limits, wallet balance, and serve/refuse status (`/cruise:budget`).
 - **Command `/cruise:spend`**: view monthly ledger spend breakdown by lane and by model (`/cruise:spend [month]`).
 - **Command `/cruise:switch`**: switch Claude Code's active model or lane in `~/.claude/settings.json`.
+- **Command `/cruise:update`**: update the Cruise plugin to the latest release and refresh the status line script.
 - **Skill `cruise`**: choosing a lane or a pinned model, and what each Cruise refusal means.
 - **Skill `/cruise:setup`**: guided setup. It runs only when you invoke it, and asks before it
   changes any file.

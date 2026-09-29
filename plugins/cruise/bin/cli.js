@@ -663,10 +663,10 @@ async function switchModel(targetModel, options = {}) {
   const isLocal = Boolean(options.local);
   if (!targetModel || typeof targetModel !== "string" || !targetModel.trim()) {
     console.error("Error: Model or lane ID is required.");
-    console.error("Usage: npx @bytesbrains/claude-code-cruise switch <model-or-lane> [--local]");
+    console.error("Usage: npx @bytesbrains/claude-code-cruise@latest switch <model-or-lane> [--local]");
     console.error("Examples:");
-    console.error("  npx @bytesbrains/claude-code-cruise switch bb/agentic-coding");
-    console.error("  npx @bytesbrains/claude-code-cruise switch anthropic/claude-sonnet-5 --local");
+    console.error("  npx @bytesbrains/claude-code-cruise@latest switch bb/agentic-coding");
+    console.error("  npx @bytesbrains/claude-code-cruise@latest switch anthropic/claude-sonnet-5 --local");
     return false;
   }
 
@@ -766,8 +766,8 @@ async function switchModel(targetModel, options = {}) {
   if (!settings.env.ANTHROPIC_BASE_URL) {
     console.log("\nℹ Notice: Cruise gateway is not enabled yet in settings.json.");
     const enableCmd = isLocal
-      ? '  Run "npx @bytesbrains/claude-code-cruise enable --local" to route requests through Cruise.'
-      : '  Run "npx @bytesbrains/claude-code-cruise enable" to route requests through Cruise.';
+      ? '  Run "npx @bytesbrains/claude-code-cruise@latest enable --local" to route requests through Cruise.'
+      : '  Run "npx @bytesbrains/claude-code-cruise@latest enable" to route requests through Cruise.';
     console.log(enableCmd);
   }
 
@@ -782,11 +782,11 @@ or auth helper failure when CRUISE_API_KEY is unset, this zero-dependency
 CLI configures Cruise LLM gateway routing offline.
 
 Usage:
-  npx @bytesbrains/claude-code-cruise <command> [options]
+  npx @bytesbrains/claude-code-cruise@latest <command> [options]
   claude-cruise [args...]
 
 If the active model fails inside Claude Code (so /cruise:disconnect cannot run),
-run "npx @bytesbrains/claude-code-cruise disable" from a terminal instead.
+run "npx @bytesbrains/claude-code-cruise@latest disable" from a terminal instead.
 
 Commands:
   run [args...]          Launch Claude Code child process with Cruise gateway environment
@@ -895,7 +895,7 @@ async function run(args = process.argv.slice(2)) {
   }
 
   console.error(`Unknown command: ${command}`);
-  console.error('Run "npx @bytesbrains/claude-code-cruise --help" for available commands.');
+  console.error('Run "npx @bytesbrains/claude-code-cruise@latest --help" for available commands.');
   return 1;
 }
 

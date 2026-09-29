@@ -29,7 +29,7 @@ Target model or lane requested by user: `$ARGUMENTS`
 
 > [!TIP]
 > If your current model lacks tool capability or fails to execute slash commands, you can switch models directly from your terminal without using Claude Code:
-> `npx @bytesbrains/claude-code-cruise switch <model-or-lane>` (or add `--local` for project settings)
+> `npx @bytesbrains/claude-code-cruise@latest switch <model-or-lane>` (or add `--local` for project settings)
 
 ## 2. Update `~/.claude/settings.json`
 

@@ -10,14 +10,14 @@ Route Claude Code's model requests through the BytesBrains Cruise LLM gateway an
 This writes Cruise into `~/.claude/settings.json`, so **every** `claude` session uses Cruise
 until you disconnect. If the user wants to keep their Anthropic subscription as the default,
 tell them about the lighter options before continuing:
-- **Per session:** `claude-cruise` (or `npx @bytesbrains/claude-code-cruise run`) starts Claude
+- **Per session:** `claude-cruise` (or `npx @bytesbrains/claude-code-cruise@latest run`) starts Claude
   Code routed through Cruise in memory and leaves `settings.json` untouched; plain `claude`
   stays on the subscription.
-- **Per project:** `/cruise:connect --local` (or `npx @bytesbrains/claude-code-cruise enable --local`)
+- **Per project:** `/cruise:connect --local` (or `npx @bytesbrains/claude-code-cruise@latest enable --local`)
   writes `./.claude/settings.json` so only this repository uses Cruise.
 
 If the active model later fails and `/cruise:disconnect` cannot run, quit Claude Code and run
-`npx @bytesbrains/claude-code-cruise disable` from a terminal.
+`npx @bytesbrains/claude-code-cruise@latest disable` from a terminal.
 
 ## 1. Verify Environment
 

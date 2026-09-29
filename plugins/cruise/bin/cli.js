@@ -470,9 +470,13 @@ function enable(options = {}) {
 function disable(options = {}) {
   const isLocal = Boolean(options.local);
   const settingsPath = getSettingsPath(options);
+  // The /cruise:disconnect hook passes its own writers, to hand the report to Claude Code
+  // instead of a terminal.
+  const log = options.log || console.log;
+  const logError = options.logError || console.error;
 
   if (!fs.existsSync(settingsPath)) {
-    console.log("Cruise routing is not active (settings file does not exist).");
+    log("Cruise routing is not active (settings file does not exist).");
     return true;
   }
 
@@ -480,7 +484,7 @@ function disable(options = {}) {
   try {
     settings = JSON.parse(fs.readFileSync(settingsPath, "utf8"));
   } catch (err) {
-    console.error(`Error: Failed to parse ${settingsPath}: ${err.message}`);
+    logError(`Error: Failed to parse ${settingsPath}: ${err.message}`);
     return false;
   }
 
@@ -586,20 +590,20 @@ function disable(options = {}) {
   }
 
   if (!modified) {
-    console.log(`Cruise routing is not active in ${settingsPath}.`);
+    log(`Cruise routing is not active in ${settingsPath}.`);
     return true;
   }
 
   fs.writeFileSync(settingsPath, JSON.stringify(settings, null, 2) + "\n", "utf8");
 
   const scopeMsg = isLocal ? " (project-level)" : "";
-  console.log(`✓ BytesBrains Cruise gateway disabled for Claude Code${scopeMsg}.`);
-  console.log(`  Removed:      ${removed.join(", ")}`);
-  console.log(`  Config File:  ${settingsPath}`);
+  log(`✓ BytesBrains Cruise gateway disabled for Claude Code${scopeMsg}.`);
+  log(`  Removed:      ${removed.join(", ")}`);
+  log(`  Config File:  ${settingsPath}`);
   const restartMsg = isLocal
     ? "Restart Claude Code in this project to return to standard Anthropic routing."
     : "Restart Claude Code to return to standard Anthropic routing.";
-  console.log(`\n${restartMsg}`);
+  log(`\n${restartMsg}`);
   return true;
 }
 
@@ -785,8 +789,9 @@ Usage:
   npx @bytesbrains/claude-code-cruise@latest <command> [options]
   claude-cruise [args...]
 
-If the active model fails inside Claude Code (so /cruise:disconnect cannot run),
-run "npx @bytesbrains/claude-code-cruise@latest disable" from a terminal instead.
+/cruise:disconnect runs locally through a plugin hook. If hooks are turned off and
+the active model fails (so /cruise:disconnect cannot run), run
+"npx @bytesbrains/claude-code-cruise@latest disable" from a terminal instead.
 
 Commands:
   run [args...]          Launch Claude Code child process with Cruise gateway environment

@@ -19,7 +19,7 @@
     "claude-cruise": "bin/cli.js"
   },
   "keywords": ["claude-code", "claude-code-plugin", "cruise", "llm-gateway", "budgets", "mcp", "bytesbrains"],
-  "files": [".claude-plugin/", ".mcp.json", "skills/", "commands/", "scripts/", "bin/", "NOTICE"],
+  "files": [".claude-plugin/", ".mcp.json", "skills/", "commands/", "hooks/", "scripts/", "bin/", "NOTICE"],
   "publishConfig": {
     "access": "public",
     "provenance": true

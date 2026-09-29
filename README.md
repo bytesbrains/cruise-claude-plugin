@@ -103,6 +103,7 @@ place ([#40](https://github.com/bytesbrains/cruise-claude-plugin/issues/40)).
 | **Command `/cruise:status`** | Inspect real-time project budget limits, wallet balance, and serve/refuse status (`/cruise:budget`) |
 | **Command `/cruise:spend`** | View monthly ledger spend breakdown by lane and by concrete model (`/cruise:spend [month]`) |
 | **Command `/cruise:switch`** | Switch Claude Code's active model or lane in `~/.claude/settings.json` |
+| **Command `/cruise:update`** | Update Cruise plugin to latest release, refresh status line script and check settings |
 | **Skill `cruise`** | When Claude works through Cruise: choosing a lane or a pinned model, and what each Cruise refusal means — `budget_exhausted` waits for the period, `wallet_exhausted` needs credit |
 | **Skill `/cruise:setup`** | The guided setup above. Runs only when you invoke it, and asks before changing any file |
 | **Status line** | Your project's spend this budget period and its state, cached for a minute. Installed by `/cruise:setup` |
@@ -117,6 +118,7 @@ Once `/cruise:setup` (or `/cruise:connect`) reports the MCP server answering:
 - **`/cruise:status`** (or **`/cruise:budget`**) → Inspect current budget, wallet balance, and serve/refuse status
 - **`/cruise:spend [month]`** → Breakdown monthly spend by lane and model (e.g. `/cruise:spend 2026-09`)
 - **`/cruise:switch <model-or-lane>`** → Switch active model (e.g. `/cruise:switch bb/agentic-coding`)
+- **`/cruise:update`** → Update Cruise plugin to latest release and refresh status line
 - *"Which Cruise models and lanes can this key reach, and what do they cost?"* → `list_models`
 - *"How much of this project's Cruise budget is left, and will my next request be served?"* →
   `get_budget`

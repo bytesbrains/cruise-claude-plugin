@@ -30,6 +30,7 @@ const EXPECTED = [
   "commands/spend.md",
   "commands/status.md",
   "commands/switch.md",
+  "commands/update.md",
   "package.json",
   "scripts/statusline.sh",
   "skills/cruise/SKILL.md",

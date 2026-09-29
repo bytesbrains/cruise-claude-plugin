@@ -134,14 +134,14 @@ describe("the skills", () => {
 describe("the commands", () => {
   it("each provide a valid frontmatter description", () => {
     const commands = readdirSync(path.join(PLUGIN, "commands"));
-    expect(commands.sort()).toEqual(["budget.md", "connect.md", "disconnect.md", "models.md", "spend.md", "status.md", "switch.md"]);
+    expect(commands.sort()).toEqual(["budget.md", "connect.md", "disconnect.md", "models.md", "spend.md", "status.md", "switch.md", "update.md"]);
     for (const cmd of commands) {
       const text = readFileSync(path.join(PLUGIN, "commands", cmd), "utf8");
       const front = /^---\n([\s\S]*?)\n---/.exec(text)?.[1] ?? "";
       expect(front, cmd).toMatch(/^description: .{20,}$/m);
     }
     // Commands that edit settings must not be invoked by the model.
-    for (const cmd of ["connect.md", "disconnect.md", "switch.md"]) {
+    for (const cmd of ["connect.md", "disconnect.md", "switch.md", "update.md"]) {
       expect(readFileSync(path.join(PLUGIN, "commands", cmd), "utf8")).toMatch(/^disable-model-invocation: true$/m);
     }
   });
@@ -226,6 +226,20 @@ describe("the commands", () => {
 
     expect(connect).toContain(jsonHelper);
     expect(setup).toContain(jsonHelper);
+  });
+
+  it("update command handles safety guards and instructions", () => {
+    const update = readFileSync(path.join(PLUGIN, "commands/update.md"), "utf8");
+    expect(update).toMatch(/plugin\.json/);
+    expect(update).toMatch(/claude plugin marketplace update bytesbrains/);
+    expect(update).toMatch(/claude plugin update cruise@bytesbrains/);
+    expect(update).toMatch(/\/plugin marketplace update bytesbrains/);
+    expect(update).toMatch(/\/plugin update cruise@bytesbrains/);
+    expect(update).toMatch(/cruise-statusline\.sh/);
+    expect(update).toMatch(/chmod \+x/);
+    expect(update).toMatch(/Ask the user/i);
+    expect(update).toMatch(/Never print, echo, repeat, or write the Cruise API key/i);
+    expect(update).toMatch(/restart Claude Code/i);
   });
 });
 

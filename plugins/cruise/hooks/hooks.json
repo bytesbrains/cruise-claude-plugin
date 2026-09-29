@@ -1,5 +1,5 @@
 {
-  "description": "Run /cruise:disconnect locally, before any model is called, so a missing or rejected Cruise key cannot block it (#45).",
+  "description": "Run /cruise:disconnect locally, before any model is called, so a missing or rejected Cruise key cannot block it (#45); warn at session start about a model native routing will reject (#42).",
   "hooks": {
     "UserPromptExpansion": [
       {
@@ -8,6 +8,18 @@
           {
             "type": "command",
             "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/disconnect.js\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ],
+    "SessionStart": [
+      {
+        "matcher": "startup|resume|clear",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/session-start.js\"",
             "timeout": 10
           }
         ]

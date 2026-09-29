@@ -57,6 +57,111 @@ function isEnvFlagOn(value) {
   return ["1", "true", "yes", "on"].includes(String(value ?? "").trim().toLowerCase());
 }
 
+// The settings files Claude Code takes `env` from, highest precedence first: the project's
+// local and shared settings, then the user's (#42). A key none of them sets comes from the
+// process environment, which in a terminal is the shell.
+function settingsEnvSources(options = {}) {
+  const cwd = options.cwd || process.cwd();
+  const userPath = path.resolve(getSettingsPath({}));
+  const candidates = [
+    { scope: "project-local", path: path.resolve(cwd, ".claude", "settings.local.json") },
+    { scope: "project", path: path.resolve(cwd, ".claude", "settings.json") },
+    { scope: "user", path: userPath },
+  ];
+  const sources = [];
+  for (const candidate of candidates) {
+    // Run from the home directory, the project's settings.json is the user's.
+    if (candidate.scope !== "user" && candidate.path === userPath) {
+      continue;
+    }
+    let settings;
+    try {
+      settings = JSON.parse(fs.readFileSync(candidate.path, "utf8"));
+    } catch {
+      continue;
+    }
+    const env = settings && typeof settings.env === "object" && !Array.isArray(settings.env) ? settings.env : {};
+    sources.push({ ...candidate, env });
+  }
+  return sources;
+}
+
+// The value Claude Code would use for an env key, and where it is set.
+function resolveEnvValue(key, sources, processEnv = process.env) {
+  for (const source of sources) {
+    const value = source.env[key];
+    if (value !== undefined && value !== null && value !== "") {
+      return { value: String(value), source };
+    }
+  }
+  if (processEnv[key]) {
+    return { value: processEnv[key], source: { scope: "shell" } };
+  }
+  return null;
+}
+
+// True when requests go to Anthropic itself: no gateway base URL, no Bedrock, no Vertex.
+function isNativeRouting(sources, processEnv = process.env) {
+  const get = (key) => resolveEnvValue(key, sources, processEnv)?.value;
+  return !get("ANTHROPIC_BASE_URL") && !isEnvFlagOn(get("CLAUDE_CODE_USE_BEDROCK")) && !isEnvFlagOn(get("CLAUDE_CODE_USE_VERTEX"));
+}
+
+// Model selectors native routing will reject: a Cruise lane or a pinned provider model left
+// behind with no gateway to resolve it (#40, #42). It is reported in every file that sets it,
+// since removing one only uncovers the next; the shell counts when no file sets the key.
+function findStaleModels(options = {}) {
+  const sources = options.sources || settingsEnvSources(options);
+  const processEnv = options.env || process.env;
+  if (!isNativeRouting(sources, processEnv)) {
+    return [];
+  }
+  const stale = [];
+  for (const key of MODEL_ENV_KEYS) {
+    const setIn = sources.filter((source) => source.env[key] !== undefined && source.env[key] !== null && source.env[key] !== "");
+    for (const source of setIn) {
+      if (isGatewayModelId(String(source.env[key]))) {
+        stale.push({ key, value: String(source.env[key]), source });
+      }
+    }
+    if (setIn.length === 0 && isGatewayModelId(processEnv[key])) {
+      stale.push({ key, value: processEnv[key], source: { scope: "shell" } });
+    }
+  }
+  return stale;
+}
+
+function describeSource(source) {
+  return source.scope === "shell" ? "shell environment" : source.path;
+}
+
+// How to clear one stale selector, by where it is set. `disable` edits the user's
+// settings.json, or the project's with --local; it never edits settings.local.json.
+function staleModelFix(entry) {
+  const disable = "npx @bytesbrains/claude-code-cruise@latest disable";
+  switch (entry.source.scope) {
+    case "user":
+      return `run /cruise:disconnect or \`${disable}\``;
+    case "project":
+      return `run /cruise:disconnect --local or \`${disable} --local\` in this project`;
+    case "project-local":
+      return `remove env.${entry.key} from that file`;
+    default:
+      return `\`unset ${entry.key}\` and remove its export from your shell profile`;
+  }
+}
+
+function formatStaleModels(stale) {
+  if (stale.length === 0) {
+    return [];
+  }
+  const lines = ["⚠ Native Anthropic routing will reject these model settings (no Cruise gateway is configured):"];
+  for (const entry of stale) {
+    lines.push(`  ${entry.key}=${entry.value}`);
+    lines.push(`    set in ${describeSource(entry.source)}: ${staleModelFix(entry)}`);
+  }
+  return lines;
+}
+
 function migrateSettings(settings) {
   if (!settings || typeof settings !== "object") {
     return false;
@@ -474,9 +579,19 @@ function disable(options = {}) {
   // instead of a terminal.
   const log = options.log || console.log;
   const logError = options.logError || console.error;
+  // A model selector set somewhere disable does not edit survives it, and native routing then
+  // rejects every request. Say where, rather than only "not active" (#42).
+  const reportRemaining = () => {
+    const lines = formatStaleModels(findStaleModels({ cwd: options.cwd, env: options.shellEnv || process.env }));
+    if (lines.length > 0) {
+      log("");
+      lines.forEach((line) => log(line));
+    }
+  };
 
   if (!fs.existsSync(settingsPath)) {
     log("Cruise routing is not active (settings file does not exist).");
+    reportRemaining();
     return true;
   }
 
@@ -591,6 +706,7 @@ function disable(options = {}) {
 
   if (!modified) {
     log(`Cruise routing is not active in ${settingsPath}.`);
+    reportRemaining();
     return true;
   }
 
@@ -604,6 +720,7 @@ function disable(options = {}) {
     ? "Restart Claude Code in this project to return to standard Anthropic routing."
     : "Restart Claude Code to return to standard Anthropic routing.";
   log(`\n${restartMsg}`);
+  reportRemaining();
   return true;
 }
 
@@ -611,9 +728,22 @@ function status(options = {}) {
   const isLocal = Boolean(options.local);
   const settingsPath = getSettingsPath(options);
   const scopeSuffix = isLocal ? " (project-level)" : "";
+  // With routing off, the model still matters: a leftover lane or provider model is what
+  // locks native routing out (#42). Show the one in effect, where it is set, and any stale ones.
+  const describeModel = () => {
+    const sources = settingsEnvSources(options);
+    const model = resolveEnvValue("ANTHROPIC_MODEL", sources);
+    console.log(`  Model:        ${model ? `${model.value} (${describeSource(model.source)})` : "(default)"}`);
+    const lines = formatStaleModels(findStaleModels({ ...options, sources }));
+    if (lines.length > 0) {
+      console.log("");
+      lines.forEach((line) => console.log(line));
+    }
+  };
 
   if (!fs.existsSync(settingsPath)) {
     console.log(`Cruise LLM gateway${scopeSuffix}: Disabled (no settings file found)`);
+    describeModel();
     return;
   }
 
@@ -622,6 +752,7 @@ function status(options = {}) {
     settings = JSON.parse(fs.readFileSync(settingsPath, "utf8"));
   } catch {
     console.log(`Cruise LLM gateway${scopeSuffix}: Unknown (settings file could not be parsed)`);
+    describeModel();
     return;
   }
 
@@ -633,6 +764,7 @@ function status(options = {}) {
 
   if (!isConfigured) {
     console.log(`Cruise LLM gateway${scopeSuffix}: Disabled (standard Anthropic routing)`);
+    describeModel();
     return;
   }
 
@@ -703,6 +835,19 @@ async function switchModel(targetModel, options = {}) {
   }
 
   migrateSettings(settings);
+
+  // A lane or provider model only resolves through a gateway. Written with native routing in
+  // effect, Anthropic rejects every request, slash commands included, so refuse unless forced (#42).
+  if (isGatewayModelId(modelId) && !options.force && isNativeRouting(settingsEnvSources(options))) {
+    const localFlag = isLocal ? " --local" : "";
+    console.error(`Error: "${modelId}" only resolves through a gateway, and Cruise routing is not enabled`);
+    console.error("  (no ANTHROPIC_BASE_URL in settings or the environment, and Bedrock/Vertex are off).");
+    console.error("  Native Anthropic routing would reject every request, slash commands included.");
+    console.error(`  Route through Cruise first:  npx @bytesbrains/claude-code-cruise@latest enable${localFlag}`);
+    console.error(`  One session only:            npx @bytesbrains/claude-code-cruise@latest run --model ${modelId}`);
+    console.error(`  Write it anyway:             npx @bytesbrains/claude-code-cruise@latest switch ${modelId}${localFlag} --force`);
+    return false;
+  }
 
   const apiKey = process.env.CRUISE_API_KEY;
   const baseUrl = detectBaseUrl(apiKey, process.env.CRUISE_BASE_URL || settings.env.ANTHROPIC_BASE_URL);
@@ -805,6 +950,7 @@ Options:
   -l, --local            Apply configuration to local project (./.claude/settings.json)
   -s, --session-id <id>  Set custom session affinity ID (1–128 chars: letters, digits, ._:-)
   --skip-check           Skip model catalogue verification when switching models
+  --force                Switch to a lane or provider model even though Cruise routing is off
   -h, --help             Show this help message
   -v, --version          Show version number`);
 }
@@ -884,6 +1030,7 @@ async function run(args = process.argv.slice(2)) {
   if (command === "switch") {
     let targetModel;
     let skipCheck = false;
+    let force = false;
     let local = false;
     for (let i = 1; i < args.length; i++) {
       const arg = args[i];
@@ -891,11 +1038,13 @@ async function run(args = process.argv.slice(2)) {
         local = true;
       } else if (arg === "--skip-check") {
         skipCheck = true;
+      } else if (arg === "--force") {
+        force = true;
       } else if (!targetModel && !arg.startsWith("-")) {
         targetModel = arg;
       }
     }
-    const success = await switchModel(targetModel, { skipCheck, local });
+    const success = await switchModel(targetModel, { skipCheck, force, local });
     return success ? 0 : 1;
   }
 
@@ -933,6 +1082,11 @@ module.exports = {
   isGatewayModelId,
   isCruiseModelId,
   isEnvFlagOn,
+  settingsEnvSources,
+  resolveEnvValue,
+  isNativeRouting,
+  findStaleModels,
+  formatStaleModels,
   MODEL_ENV_KEYS,
   KNOWN_PREFIXES,
   SESSION_ID_REGEX,

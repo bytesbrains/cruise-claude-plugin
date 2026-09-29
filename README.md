@@ -82,10 +82,13 @@ npx @bytesbrains/claude-code-cruise@latest disable
 | **Per project** | `npx @bytesbrains/claude-code-cruise@latest enable --local` (or `/cruise:connect --local`) writes `./.claude/settings.json` | A repository that should always use Cruise |
 | **Global** | `/cruise:connect` or `npx @bytesbrains/claude-code-cruise@latest enable` | Cruise for every session |
 
-Slash commands run through the active model. If that model fails, `/cruise:disconnect` cannot
-run either: quit Claude Code and run `npx @bytesbrains/claude-code-cruise@latest disable`. It removes
-Cruise lanes and pinned provider models (`provider/model`) from every model setting, so native
-routing starts clean.
+Slash commands run through the active model, but `/cruise:disconnect` does not: a plugin hook
+runs it on your machine before the prompt is sent (and only for that command), so a missing, expired or refused
+`CRUISE_API_KEY`, an exhausted budget or an unreachable gateway cannot block it
+([#45](https://github.com/bytesbrains/cruise-claude-plugin/issues/45)). If hooks are turned off
+(`disableAllHooks`), quit Claude Code and run `npx @bytesbrains/claude-code-cruise@latest disable`
+instead. Both remove Cruise lanes and pinned provider models (`provider/model`) from every model
+setting, so native routing starts clean.
 
 Keep the `@latest`: without it, `npx` reuses whatever older copy it has cached, and one from
 before v0.1.15 reports "Cruise routing is not active" and leaves a stale `provider/model` in
@@ -98,7 +101,7 @@ place ([#40](https://github.com/bytesbrains/cruise-claude-plugin/issues/40)).
 | **CLI `claude-code-cruise` / `claude-cruise`** | Standalone bootstrapper and on-demand launcher (`claude-cruise`, `run`, `enable`, `disable`, `switch`) with global and project-level (`--local`) scope |
 | **MCP server `cruise`** | Three read-only tools about your key's own project: `list_models` (models and lanes you can reach, with prices), `get_budget` (what is left, and whether the next request is served), `get_spend` (a month's charges by model or lane). Reads `CRUISE_API_KEY` and `CRUISE_BASE_URL` from the environment |
 | **Command `/cruise:connect`** | Route Claude Code through Cruise and install the spend status line in one step |
-| **Command `/cruise:disconnect`** | Disconnect from Cruise gateway and restore standard Anthropic routing |
+| **Command `/cruise:disconnect`** | Disconnect from Cruise gateway and restore standard Anthropic routing. Runs locally through a hook, with no model, network or key |
 | **Command `/cruise:models`** | List available Cruise models and lanes with pricing, capabilities, and active selection |
 | **Command `/cruise:status`** | Inspect real-time project budget limits, wallet balance, and serve/refuse status (`/cruise:budget`) |
 | **Command `/cruise:spend`** | View monthly ledger spend breakdown by lane and by concrete model (`/cruise:spend [month]`) |
@@ -136,12 +139,12 @@ The tools read only your key's own project and never change anything.
 | `Your apiKeyHelper script is failing` | `CRUISE_API_KEY` is not exported in this terminal (or legacy helper configured) | Export `CRUISE_API_KEY` and restart, run `npx @bytesbrains/claude-code-cruise@latest status` to auto-upgrade, or `disable` to revert offline |
 | The same 401 with the key set | The key is wrong for this Cruise host, or revoked | Check `CRUISE_BASE_URL` against the key's prefix: a `cru_demo_` key only works with the demo host. Then ask for a new key |
 | No `cruise` server in `/mcp` | The plugin is not installed or not enabled | Run `/plugin` |
-| Status line: `Cruise: set CRUISE_API_KEY` | The key is not in the status line's environment | Export it where Claude Code starts |
+| Status line: `Cruise: set CRUISE_API_KEY, or /cruise:disconnect` | The key is not in the status line's environment | Export it where Claude Code starts, or run `/cruise:disconnect` to go back to your subscription |
 | Status line: `Cruise: CRUISE_API_KEY is not a Cruise key` | The value has characters a Cruise key cannot have, so it was never sent | Check for quotes or a trailing newline in the value |
 | Status line: `Cruise: no answer from <url>` | Cruise did not answer within three seconds, or answered with something else | Check the URL. The line retries after its one-minute cache |
 | A request refused with `budget_exhausted` | The project's cap for this period is spent | Wait for the period to reset, or raise the cap |
 | A request refused with `wallet_exhausted` | The account is out of credit. Waiting does not help | Top up the wallet |
-| `There's an issue with the selected model (claude-opus-5-5[1m])`, even from `/cruise:disconnect` | `/model`'s 1M context option appends `[1m]`, which Cruise answers with `model_not_found`. Slash commands use the same model, so they fail too | Quit Claude Code and run `npx @bytesbrains/claude-code-cruise@latest disable` (or `switch bb/agentic-coding`) in a terminal. Pick a Cruise lane in `/model`, not a 1M option |
+| `There's an issue with the selected model (claude-opus-5-5[1m])` | `/model`'s 1M context option appends `[1m]`, which Cruise answers with `model_not_found`. Slash commands use the same model, so they fail too | Run `/cruise:disconnect` (it needs no model), or quit Claude Code and run `npx @bytesbrains/claude-code-cruise@latest disable` (or `switch bb/agentic-coding`) in a terminal. Pick a Cruise lane in `/model`, not a 1M option |
 | `There's an issue with the selected model (google-ai-studio/gemini-3.8-flash)` on your subscription, and `/model` keeps it | `env.ANTHROPIC_MODEL` still names a `provider/model` but Cruise routing is off, so Anthropic rejects it. The env var overrides `/model` | Quit Claude Code and run `npx @bytesbrains/claude-code-cruise@latest disable` (`--local` if the model is in `./.claude/settings.json`); it should list `env.ANTHROPIC_MODEL` under "Removed". If it says "not active" instead, the model is set somewhere `disable` does not edit: check `echo $ANTHROPIC_MODEL` for a shell export, and `.claude/settings.local.json`. Confirm with `grep ANTHROPIC_MODEL ~/.claude/settings.json` (no output) and `/status` after restarting |
 | HTTP 400: `Function call is missing a thought_signature in functionCall parts` | Google Gemini models with thinking enabled fail multi-turn tool calling in Claude Code ([bytesbrains-cruise#543](https://github.com/bytesbrains/bytesbrains-cruise/issues/543)) | Switch to `bb/agentic-coding` or `anthropic/claude-sonnet-5` (via `/cruise:switch bb/agentic-coding` or `npx @bytesbrains/claude-code-cruise@latest switch bb/agentic-coding`), or run `/clear` to reset conversation context |
 | Claude Code warning: `"<model>" isn't described by this version's model catalog` | Claude Code restricts uncataloged models to 200k tokens by default | Cruise automatically sets `CLAUDE_CODE_MAX_CONTEXT_TOKENS=1000000` and `CLAUDE_CODE_DISABLE_UNKNOWN_MODEL_WINDOW_ENFORCEMENT=1` to guarantee a 1M token context window for agentic coding and silence the warning |

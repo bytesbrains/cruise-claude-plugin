@@ -6,7 +6,7 @@
 // says when it applies, and the status line prints what it should from the
 // answer Cruise actually gives.
 import { execFileSync, spawn, spawnSync } from "node:child_process";
-import { chmodSync, copyFileSync, existsSync, mkdtempSync, readdirSync, readFileSync, statSync, symlinkSync, writeFileSync } from "node:fs";
+import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readdirSync, readFileSync, statSync, symlinkSync, writeFileSync } from "node:fs";
 import { createServer } from "node:http";
 import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
@@ -256,7 +256,7 @@ describe("the status line script", () => {
   });
 
   it("asks for a key rather than calling anything without one", () => {
-    expect(run({ TMPDIR: mkdtempSync(path.join(tmpdir(), "cruise-")) }).stdout).toBe("Cruise: set CRUISE_API_KEY\n");
+    expect(run({ TMPDIR: mkdtempSync(path.join(tmpdir(), "cruise-")) }).stdout).toBe("Cruise: set CRUISE_API_KEY, or /cruise:disconnect\n");
   });
 
   // The key is written into a curl config line; a quote and a newline would
@@ -1421,3 +1421,91 @@ console.log("MODEL:" + process.env.ANTHROPIC_MODEL);
   });
 });
 
+
+describe("the /cruise:disconnect hook (#45)", () => {
+  // A missing or refused key makes every model turn retry a 401, and a slash
+  // command is a model turn. The hook must disconnect before one is sent.
+  const HOOK = path.join(PLUGIN, "hooks/disconnect.js");
+  const { parse } = require(HOOK);
+  const runHook = (input: unknown, env: Record<string, string> = {}) =>
+    spawnSync(process.execPath, [HOOK], {
+      input: typeof input === "string" ? input : JSON.stringify(input),
+      encoding: "utf8",
+      env: { PATH: process.env.PATH ?? "", ...env },
+    });
+  const cruiseSettings = {
+    apiKeyHelper: 'printf "%s" "${CRUISE_API_KEY:-missing_cruise_key}"',
+    env: { ANTHROPIC_BASE_URL: "https://cruise.bytesbrains.net", ANTHROPIC_MODEL: "bb/agentic-coding", KEEP: "me" },
+    statusLine: { type: "command", command: "~/.claude/cruise-statusline.sh" },
+  };
+
+  // UserPromptExpansion, matched to the command, so no other prompt starts a
+  // process. Claude Code matches plugin commands as `cruise:disconnect` (not the
+  // `plugin:cruise:disconnect` some docs show), anchored so no lookalike matches.
+  it("is registered on UserPromptExpansion for /cruise:disconnect only, and ships in the package", () => {
+    const hooks = json("plugins/cruise/hooks/hooks.json");
+    expect(Object.keys(hooks.hooks)).toEqual(["UserPromptExpansion"]);
+    const [entry] = hooks.hooks.UserPromptExpansion;
+    expect(entry.matcher).toBe("^cruise:disconnect$");
+    expect(entry.hooks[0].command).toContain("${CLAUDE_PLUGIN_ROOT}/hooks/disconnect.js");
+    expect(json("plugins/cruise/package.json").files).toContain("hooks/");
+  });
+
+  it("reads /cruise:disconnect and its --local flag from the expansion", () => {
+    expect(parse({ command_name: "cruise:disconnect" })).toEqual({ local: false });
+    expect(parse({ command_name: "cruise:disconnect", command_args: " --local " })).toEqual({ local: true });
+    expect(parse({ command_name: "cruise:disconnect", command_args: "-l" })).toEqual({ local: true });
+    expect(parse({ command_name: "cruise:disconnect", command_args: { scope: "--local" } })).toEqual({ local: true });
+    expect(parse({ command_name: "cruise:status" })).toBeNull();
+    expect(parse({ command_name: "disconnect" })).toBeNull();
+    expect(parse(undefined)).toBeNull();
+  });
+
+  it("passes any other command through without output", () => {
+    const out = runHook({ command_name: "cruise:status", cwd: tmpdir() });
+    expect(out.status).toBe(0);
+    expect(out.stdout).toBe("");
+    expect(runHook("not json").stdout).toBe("");
+  });
+
+  it("disconnects with no CRUISE_API_KEY and blocks the expansion from reaching the model", () => {
+    const tmp = mkdtempSync(path.join(tmpdir(), "cruise-hook-test-"));
+    const settingsPath = path.join(tmp, "settings.json");
+    writeFileSync(settingsPath, JSON.stringify(cruiseSettings));
+
+    const out = runHook({ command_name: "cruise:disconnect", cwd: tmp }, { CLAUDE_CONFIG_DIR: tmp });
+    expect(out.status).toBe(0);
+    const result = JSON.parse(out.stdout);
+    expect(result.decision).toBe("block");
+    expect(result.reason).toMatch(/BytesBrains Cruise gateway disabled/);
+    expect(result.reason).toMatch(/Restart Claude Code/);
+    expect(JSON.parse(readFileSync(settingsPath, "utf8"))).toEqual({ env: { KEEP: "me" } });
+
+    // Already disconnected: still blocked, and says so.
+    const again = JSON.parse(runHook({ command_name: "cruise:disconnect", cwd: tmp }, { CLAUDE_CONFIG_DIR: tmp }).stdout);
+    expect(again.decision).toBe("block");
+    expect(again.reason).toMatch(/not active/);
+  });
+
+  it("--local edits the project's settings in the hook's cwd, not the global file", () => {
+    const home = mkdtempSync(path.join(tmpdir(), "cruise-hook-home-"));
+    const project = mkdtempSync(path.join(tmpdir(), "cruise-hook-project-"));
+    writeFileSync(path.join(home, "settings.json"), JSON.stringify(cruiseSettings));
+    mkdirSync(path.join(project, ".claude"));
+    writeFileSync(path.join(project, ".claude/settings.json"), JSON.stringify(cruiseSettings));
+
+    const result = JSON.parse(runHook({ command_name: "cruise:disconnect", command_args: "--local", cwd: project }, { CLAUDE_CONFIG_DIR: home }).stdout);
+    expect(result.reason).toMatch(/project-level/);
+    expect(JSON.parse(readFileSync(path.join(project, ".claude/settings.json"), "utf8"))).toEqual({ env: { KEEP: "me" } });
+    expect(JSON.parse(readFileSync(path.join(home, "settings.json"), "utf8"))).toEqual(cruiseSettings);
+  });
+
+  it("still blocks on a broken settings file, pointing at the terminal recovery", () => {
+    const tmp = mkdtempSync(path.join(tmpdir(), "cruise-hook-test-"));
+    writeFileSync(path.join(tmp, "settings.json"), "{ not json");
+    const result = JSON.parse(runHook({ command_name: "cruise:disconnect", cwd: tmp }, { CLAUDE_CONFIG_DIR: tmp }).stdout);
+    expect(result.decision).toBe("block");
+    expect(result.reason).toMatch(/Failed to parse/);
+    expect(result.reason).toContain("npx @bytesbrains/claude-code-cruise@latest disable");
+  });
+});

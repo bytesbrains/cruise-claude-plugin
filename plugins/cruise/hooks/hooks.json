@@ -1,0 +1,17 @@
+{
+  "description": "Run /cruise:disconnect locally, before any model is called, so a missing or rejected Cruise key cannot block it (#45).",
+  "hooks": {
+    "UserPromptExpansion": [
+      {
+        "matcher": "^cruise:disconnect$",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"${CLAUDE_PLUGIN_ROOT}/hooks/disconnect.js\"",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}

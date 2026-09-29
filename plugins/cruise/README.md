@@ -58,8 +58,9 @@ npx @bytesbrains/claude-code-cruise@latest disable
 
 To keep your Anthropic subscription as the default, leave `~/.claude/settings.json` alone: run
 `claude` for the subscription and `claude-cruise` for a session routed through Cruise. Use
-`enable --local` for repositories that should always use Cruise. If the active model fails and
-`/cruise:disconnect` cannot run, `disable` works from any terminal with no model and no key.
+`enable --local` for repositories that should always use Cruise. `/cruise:disconnect` runs
+locally through a plugin hook, so a failing model or a missing key cannot block it; with hooks
+turned off, `disable` does the same from any terminal with no model and no key.
 
 ## What is inside
 
@@ -67,7 +68,7 @@ To keep your Anthropic subscription as the default, leave `~/.claude/settings.js
 - **MCP server `cruise`**: three read-only tools, `list_models`, `get_budget` and `get_spend`,
   about your key's own project.
 - **Command `/cruise:connect`**: route Claude Code through Cruise and install the status line in 1 step (including gateway session affinity and traffic class tagging).
-- **Command `/cruise:disconnect`**: disconnect from Cruise and revert to standard Anthropic routing.
+- **Command `/cruise:disconnect`**: disconnect from Cruise and revert to standard Anthropic routing, locally through a `UserPromptExpansion` hook, with no model, network or key.
 - **Command `/cruise:models`**: list reachable models and lanes with pricing and active selection.
 - **Command `/cruise:status`**: inspect current project budget limits, wallet balance, and serve/refuse status (`/cruise:budget`).
 - **Command `/cruise:spend`**: view monthly ledger spend breakdown by lane and by model (`/cruise:spend [month]`).

@@ -7,11 +7,13 @@ disable-model-invocation: true
 
 Revert Claude Code back to direct Anthropic API / subscription routing by removing Cruise gateway settings.
 
-> **Stuck? Disconnect from a terminal.** Slash commands run through the active model, so if
-> that model is failing (for example `model_not_found` on `claude-opus-5-5[1m]`) or the Cruise
-> budget is exhausted, this command cannot run. Quit Claude Code and run
-> `npx @bytesbrains/claude-code-cruise@latest disable` (add `--local` for a project-level setup)
-> instead. It needs no model, no network and no `CRUISE_API_KEY`.
+> **Normally handled without a model.** The plugin's `UserPromptExpansion` hook
+> (`hooks/disconnect.js`) runs `/cruise:disconnect` locally before the prompt is sent, so a
+> missing or refused `CRUISE_API_KEY`, an exhausted budget or an unreachable gateway cannot block
+> it. These instructions only run when hooks are turned off. If the active model is failing
+> then too, quit Claude Code and run `npx @bytesbrains/claude-code-cruise@latest disable` (add
+> `--local` for a project-level setup) instead. It needs no model, no network and no
+> `CRUISE_API_KEY`.
 
 ## 1. Inspect `~/.claude/settings.json`
  

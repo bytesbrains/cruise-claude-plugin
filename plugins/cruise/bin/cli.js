@@ -86,12 +86,15 @@ function settingsEnvSources(options = {}) {
   return sources;
 }
 
+function isSet(value) {
+  return value !== undefined && value !== null && value !== "";
+}
+
 // The value Claude Code would use for an env key, and where it is set.
 function resolveEnvValue(key, sources, processEnv = process.env) {
   for (const source of sources) {
-    const value = source.env[key];
-    if (value !== undefined && value !== null && value !== "") {
-      return { value: String(value), source };
+    if (isSet(source.env[key])) {
+      return { value: String(source.env[key]), source };
     }
   }
   if (processEnv[key]) {
@@ -115,23 +118,32 @@ function findStaleModels(options = {}) {
   if (!isNativeRouting(sources, processEnv)) {
     return [];
   }
-  const stale = [];
-  for (const key of MODEL_ENV_KEYS) {
-    const setIn = sources.filter((source) => source.env[key] !== undefined && source.env[key] !== null && source.env[key] !== "");
-    for (const source of setIn) {
-      if (isGatewayModelId(String(source.env[key]))) {
-        stale.push({ key, value: String(source.env[key]), source });
-      }
-    }
-    if (setIn.length === 0 && isGatewayModelId(processEnv[key])) {
-      stale.push({ key, value: processEnv[key], source: { scope: "shell" } });
-    }
-  }
-  return stale;
+  return MODEL_ENV_KEYS.flatMap((key) => {
+    const setIn = sources.filter((source) => isSet(source.env[key]));
+    const found = setIn.length > 0
+      ? setIn.map((source) => ({ key, value: String(source.env[key]), source }))
+      : [{ key, value: processEnv[key], source: { scope: "shell" } }];
+    return found.filter((entry) => isGatewayModelId(entry.value));
+  });
+}
+
+// Settings values belong to whichever repository is open, and they are printed to a terminal
+// (and shown by the SessionStart hook). Escape control characters, so a value cannot fake
+// lines of output or send terminal escapes, and cap its length (#47 review).
+function escapeControl(text) {
+  return String(text).replace(
+    /[\u0000-\u001f\u007f-\u009f\u2028\u2029]/g,
+    (c) => `\\u${c.charCodeAt(0).toString(16).padStart(4, "0")}`
+  );
+}
+
+function displayValue(value) {
+  const text = String(value);
+  return `"${escapeControl(text.length > 200 ? `${text.slice(0, 200)}…` : text)}"`;
 }
 
 function describeSource(source) {
-  return source.scope === "shell" ? "shell environment" : source.path;
+  return source.scope === "shell" ? "shell environment" : escapeControl(source.path);
 }
 
 // How to clear one stale selector, by where it is set. `disable` edits the user's
@@ -156,7 +168,7 @@ function formatStaleModels(stale) {
   }
   const lines = ["⚠ Native Anthropic routing will reject these model settings (no Cruise gateway is configured):"];
   for (const entry of stale) {
-    lines.push(`  ${entry.key}=${entry.value}`);
+    lines.push(`  ${entry.key}=${displayValue(entry.value)}`);
     lines.push(`    set in ${describeSource(entry.source)}: ${staleModelFix(entry)}`);
   }
   return lines;
@@ -733,7 +745,7 @@ function status(options = {}) {
   const describeModel = () => {
     const sources = settingsEnvSources(options);
     const model = resolveEnvValue("ANTHROPIC_MODEL", sources);
-    console.log(`  Model:        ${model ? `${model.value} (${describeSource(model.source)})` : "(default)"}`);
+    console.log(`  Model:        ${model ? `${displayValue(model.value)} (${describeSource(model.source)})` : "(default)"}`);
     const lines = formatStaleModels(findStaleModels({ ...options, sources }));
     if (lines.length > 0) {
       console.log("");

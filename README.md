@@ -83,7 +83,7 @@ npx @bytesbrains/claude-code-cruise@latest disable
 | **Global** | `/cruise:connect` or `npx @bytesbrains/claude-code-cruise@latest enable` | Cruise for every session |
 
 Slash commands run through the active model, but `/cruise:disconnect` does not: a plugin hook
-runs it on your machine before the prompt is sent, so a missing, expired or refused
+runs it on your machine before the prompt is sent (and only for that command), so a missing, expired or refused
 `CRUISE_API_KEY`, an exhausted budget or an unreachable gateway cannot block it
 ([#45](https://github.com/bytesbrains/cruise-claude-plugin/issues/45)). If hooks are turned off
 (`disableAllHooks`), quit Claude Code and run `npx @bytesbrains/claude-code-cruise@latest disable`

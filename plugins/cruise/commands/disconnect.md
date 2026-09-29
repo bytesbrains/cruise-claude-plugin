@@ -7,7 +7,7 @@ disable-model-invocation: true
 
 Revert Claude Code back to direct Anthropic API / subscription routing by removing Cruise gateway settings.
 
-> **Normally handled without a model.** The plugin's `UserPromptSubmit` hook
+> **Normally handled without a model.** The plugin's `UserPromptExpansion` hook
 > (`hooks/disconnect.js`) runs `/cruise:disconnect` locally before the prompt is sent, so a
 > missing or refused `CRUISE_API_KEY`, an exhausted budget or an unreachable gateway cannot block
 > it. These instructions only run when hooks are turned off. If the active model is failing

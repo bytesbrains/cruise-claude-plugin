@@ -235,8 +235,10 @@ describe("the commands", () => {
     expect(update).toMatch(/claude plugin update cruise@bytesbrains/);
     expect(update).toMatch(/\/plugin marketplace update bytesbrains/);
     expect(update).toMatch(/\/plugin update cruise@bytesbrains/);
+    expect(update).toMatch(/sort -V|semver/i);
     expect(update).toMatch(/cruise-statusline\.sh/);
     expect(update).toMatch(/chmod \+x/);
+    expect(update).toMatch(/Do NOT fall back to `\$\{CLAUDE_PLUGIN_ROOT\}/i);
     expect(update).toMatch(/Ask the user/i);
     expect(update).toMatch(/Never print, echo, repeat, or write the Cruise API key/i);
     expect(update).toMatch(/restart Claude Code/i);

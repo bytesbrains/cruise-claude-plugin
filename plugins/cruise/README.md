@@ -39,21 +39,21 @@ When a Claude subscription is expired or quota is exhausted, Claude Code fails b
 
 ```sh
 # Run Claude on-demand through Cruise without modifying global settings
-npx @bytesbrains/claude-code-cruise run [args...]
+npx @bytesbrains/claude-code-cruise@latest run [args...]
 # or binary alias:
 claude-cruise [args...]
 
 # Enable Cruise gateway routing & status line globally
-npx @bytesbrains/claude-code-cruise enable
+npx @bytesbrains/claude-code-cruise@latest enable
 
 # Or configure Cruise for the current project only (./.claude/settings.json)
-npx @bytesbrains/claude-code-cruise enable --local
+npx @bytesbrains/claude-code-cruise@latest enable --local
 
 # Switch active model or lane (globally or with --local)
-npx @bytesbrains/claude-code-cruise switch bb/agentic-coding
+npx @bytesbrains/claude-code-cruise@latest switch bb/agentic-coding
 
 # Safely revert to standard Anthropic routing
-npx @bytesbrains/claude-code-cruise disable
+npx @bytesbrains/claude-code-cruise@latest disable
 ```
 
 To keep your Anthropic subscription as the default, leave `~/.claude/settings.json` alone: run

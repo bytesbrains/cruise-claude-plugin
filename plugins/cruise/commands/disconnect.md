@@ -10,7 +10,7 @@ Revert Claude Code back to direct Anthropic API / subscription routing by removi
 > **Stuck? Disconnect from a terminal.** Slash commands run through the active model, so if
 > that model is failing (for example `model_not_found` on `claude-opus-5-5[1m]`) or the Cruise
 > budget is exhausted, this command cannot run. Quit Claude Code and run
-> `npx @bytesbrains/claude-code-cruise disable` (add `--local` for a project-level setup)
+> `npx @bytesbrains/claude-code-cruise@latest disable` (add `--local` for a project-level setup)
 > instead. It needs no model, no network and no `CRUISE_API_KEY`.
 
 ## 1. Inspect `~/.claude/settings.json`
@@ -67,5 +67,5 @@ Safely remove the Cruise gateway overrides while preserving all other user setti
 - Remind the user to restart Claude Code (`quit` and reopen) to return to standard Anthropic routing.
 - Advise them to run `/status` after restart to verify native credentials and endpoints.
 - Mention that they can use Cruise again without touching `~/.claude/settings.json` by starting
-  `claude-cruise` (or `npx @bytesbrains/claude-code-cruise run`), which routes only that session
+  `claude-cruise` (or `npx @bytesbrains/claude-code-cruise@latest run`), which routes only that session
   through Cruise.

@@ -57,7 +57,7 @@ in its local catalog, triggering early auto-compaction and emitting warnings. Wh
 
 Slash commands, `/cruise:disconnect` included, run through the active model. If that model is
 refused (`model_not_found`, `budget_exhausted`, `wallet_exhausted`), tell the user to quit Claude
-Code and run `npx @bytesbrains/claude-code-cruise disable` (or `switch <model>`) in a terminal.
+Code and run `npx @bytesbrains/claude-code-cruise@latest disable` (or `switch <model>`) in a terminal.
 It edits `settings.json` offline and needs no model and no key.
 
 ## Reading a refusal

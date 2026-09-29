@@ -49,11 +49,11 @@ If the server failed to connect, read its error against step 1 before blaming th
 
 First ask how the user wants to switch between Cruise and their Anthropic subscription:
 - **Dual-command (recommended):** leave `~/.claude/settings.json` alone. `claude` stays on the
-  subscription, and `claude-cruise` (alias for `npx @bytesbrains/claude-code-cruise run`) starts a
+  subscription, and `claude-cruise` (alias for `npx @bytesbrains/claude-code-cruise@latest run`) starts a
   session routed through Cruise in memory. Nothing to undo, nothing to get locked out of. If they
   pick this, skip the rest of this step.
 - **Per project:** write the settings below to `./.claude/settings.json` in this repository
-  (`npx @bytesbrains/claude-code-cruise enable --local`) so only that repo uses Cruise.
+  (`npx @bytesbrains/claude-code-cruise@latest enable --local`) so only that repo uses Cruise.
 - **Global:** write them to `~/.claude/settings.json`, as below.
 
 Explain what this changes before asking:
@@ -100,7 +100,7 @@ a fallback non-empty token (`missing_cruise_key`) when `CRUISE_API_KEY` is unset
 does not hard-block the session or prevent slash commands like `/cruise:disconnect` from executing.
 Then tell them to restart Claude Code and run `/status`: the base URL should be Cruise's and the
 credential source `apiKeyHelper`. To undo, run `/cruise:disconnect`, or — if the active model is
-failing and slash commands cannot run — `npx @bytesbrains/claude-code-cruise disable` in a terminal.
+failing and slash commands cannot run — `npx @bytesbrains/claude-code-cruise@latest disable` in a terminal.
 
 ## 4. The spend status line (optional — ask first)
 
